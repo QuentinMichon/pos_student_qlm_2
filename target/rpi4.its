@@ -33,7 +33,7 @@
 			entry = <0x01008000>;
 		};
 
-	fdt_linux {
+		fdt_linux {
 			description = "Linux device tree blob";
 			data = /incbin/("../linux/linux/build/rpi4/arch/arm/boot/dts/bcm2711-rpi-4-b.dtb");
 			type = "flat_dt";

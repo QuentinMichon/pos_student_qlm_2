@@ -1,17 +1,60 @@
-*.o
+# Ignore all generated files :
+*.[oa]
 *.cmd
-*.tmp
+*.tmp*
+*.log
 *.ko
+*.mk
+*.builtin
+*.dtb
+*.su
 *.symvers
 *.mod
 *.mod.c
-modules.order
 *.itb
 build/
 
 *.img.*
 
+**/doxy/**
+**/generated/**
+**/optee_os/out/**
+
 linux/usr/out
+
+#vmlinux*
+uImage*
+domains*
+modules.order
+vmlinux.*dom*
+**/include/config/**
+
+# Backup files
+*~
+*.d
+
+# Hidden files
+.*
+
+# Eclipse stuff
+*.launch
+
+linux/linux.vexpress
+linux/linux.rpi
+linux/linux.noavz
+u-boot.vexpress
+u-boot.rpi
+
+# except the followings:
+#Don't ignore the ignore file ;-)
+!.gitignore
+#TaMPLate files for the man documentation
+!*.tmpl
+!buildroot/**
+!buildroot/docs/manual/*.mk
+!agency/rootfs/*.mk
+!agency/rootfs/package/**
+!agency/rootfs/board/**/*.d
 
 so3/so3/scripts/basic/fixdep
 so3/so3/scripts/kconfig/conf

@@ -5,7 +5,17 @@
 # First setup the building environment
 
 
+this-makefile := $(lastword $(MAKEFILE_LIST))
+abs_srctree := $(realpath $(dir $(this-makefile)))
+
+-include $(abs_srctree)/../../build.conf
+$(info *********** Running for $(PLATFORM) *********)
+
+ifeq ($(PLATFORM),$(filter $(PLATFORM),virt64 rpi4_64))
+GCC       = aarch64-none-linux-gnu-
+else
 GCC       = arm-linux-gnueabihf-
+endif
 CC           = $(GCC)gcc
 AS           = $(GCC)as
 AR           = $(GCC)ar
@@ -13,19 +23,16 @@ LD           = $(GCC)ld
 CPP          = $(GCC)cpp
 OBJDUMP	     = $(GCC)objdump
 
-this-makefile := $(lastword $(MAKEFILE_LIST))
-abs_srctree := $(realpath $(dir $(this-makefile)))
-
 gccincdir := $(shell $(CC) -print-file-name=include)
 LIBGCC_PATH := $(shell dirname `$(CC) $(USR_CFLAGS) -print-libgcc-file-name`)
 
 AFLAGS      := -D__ASSEMBLY__
 
 # Compiler Options - Optimisation, warnings and compiler execution parameters
-USR_CFLAGS      := -O0 -pipe -Wall  -D__ARM__ -marm  -mno-thumb-interwork  -g
+USR_CFLAGS      := -O0 -pipe -Wall  -D__ARM__ -g
 
 # Compiler Options - Libraries parameters
-USR_CFLAGS      += -ffreestanding -I. -Isrc/include -fno-common
+USR_CFLAGS      += -I. -Isrc/include -fno-common
 
 # Aggressive flags
 USR_CFLAGS	+= -Wall -Werror
@@ -39,8 +46,6 @@ LDFLAGS      = -N -warn-common -warn-constructors -warn-multiple-gp -L $(LIBGCC_
 # Our source apps
 -include src/Makefile
 
--include $(abs_srctree)/../../build.conf
-$(info *********** Running for $(PLATFORM) *********)
 
 USR_DIR = $(PWD)
 export USR_DIR
