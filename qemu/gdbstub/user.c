@@ -108,8 +108,17 @@ void gdb_exit(int code)
 
     trace_gdbstub_op_exiting((uint8_t)code);
 
-    snprintf(buf, sizeof(buf), "W%02x", (uint8_t)code);
-    gdb_put_packet(buf);
+    if (gdbserver_state.allow_stop_reply) {
+        snprintf(buf, sizeof(buf), "W%02x", (uint8_t)code);
+        gdb_put_packet(buf);
+        gdbserver_state.allow_stop_reply = false;
+    }
+
+}
+
+void gdb_qemu_exit(int code)
+{
+    exit(code);
 }
 
 int gdb_handlesig(CPUState *cpu, int sig)
@@ -127,11 +136,14 @@ int gdb_handlesig(CPUState *cpu, int sig)
 
     if (sig != 0) {
         gdb_set_stop_cpu(cpu);
-        g_string_printf(gdbserver_state.str_buf,
-                        "T%02xthread:", gdb_target_signal_to_gdb(sig));
-        gdb_append_thread_id(cpu, gdbserver_state.str_buf);
-        g_string_append_c(gdbserver_state.str_buf, ';');
-        gdb_put_strbuf();
+        if (gdbserver_state.allow_stop_reply) {
+            g_string_printf(gdbserver_state.str_buf,
+                            "T%02xthread:", gdb_target_signal_to_gdb(sig));
+            gdb_append_thread_id(cpu, gdbserver_state.str_buf);
+            g_string_append_c(gdbserver_state.str_buf, ';');
+            gdb_put_strbuf();
+            gdbserver_state.allow_stop_reply = false;
+        }
     }
     /*
      * gdb_put_packet() might have detected that the peer terminated the
@@ -174,12 +186,14 @@ void gdb_signalled(CPUArchState *env, int sig)
 {
     char buf[4];
 
-    if (!gdbserver_state.init || gdbserver_user_state.fd < 0) {
+    if (!gdbserver_state.init || gdbserver_user_state.fd < 0 ||
+        !gdbserver_state.allow_stop_reply) {
         return;
     }
 
     snprintf(buf, sizeof(buf), "X%02x", gdb_target_signal_to_gdb(sig));
     gdb_put_packet(buf);
+    gdbserver_state.allow_stop_reply = false;
 }
 
 static void gdb_accept_init(int fd)
@@ -190,7 +204,6 @@ static void gdb_accept_init(int fd)
     gdbserver_state.c_cpu = gdb_first_attached_cpu();
     gdbserver_state.g_cpu = gdbserver_state.c_cpu;
     gdbserver_user_state.fd = fd;
-    gdb_has_xml = false;
 }
 
 static bool gdb_accept_socket(int gdb_fd)

@@ -54,6 +54,7 @@ typedef struct vextEmulState {
 
 	QemuMutex cmd_mutex; /* Condition variable and associated mutex */
 	QemuCond cmd_cond;
+	QemuMutex connect_mutex; /* Mutex for connection handling */
 
 	QemuThread eventThreadId; /* Command thread sending commands to the GUI */
 	QemuThread cmdThreadId; /* Command thread sending commands to the GUI */
@@ -92,6 +93,32 @@ void *vext_cmd_post(cJSON *packet) {
 	return NULL;
 }
 
+static void vext_try_connect(void) {
+	char host[255];
+	snprintf(host, 255, "%s:%d", TCP_HOSTNAME, TCP_PORT);
+
+	qemu_mutex_lock(&vext_state.connect_mutex);
+
+	if (vext_state.sock >= 0) {
+		/* Already connected */
+		qemu_mutex_unlock(&vext_state.connect_mutex);
+		return;
+	}
+
+	printf("%s: trying to connect to Sense-HAT server...\n", __func__);
+	while (vext_state.sock < 0 && !vext_state.thread_terminate) {
+		/* Try to connect */
+		vext_state.sock = inet_connect(host, NULL);
+
+		if (vext_state.sock < 0) {
+			sleep(CONNECT_WAIT);
+		}
+	}
+	printf("%s: connected to Sense-HAT server!\n", __func__);
+
+	qemu_mutex_unlock(&vext_state.connect_mutex);
+}
+
 /*
  * This loop empties the queue as fast as it can, sending the stringified
  * JSON through the socket.
@@ -124,10 +151,18 @@ static void *vext_emul_cmd_process(void *arg) {
 
 			rendered[len] = '\n';
 
-			ret = write(vext->sock, rendered, len+1);
-			if (ret <= 0) {
-				fprintf(stderr, "%s: Write error on socket.\n", __func__);
-				vext->thread_terminate = 1;
+			if (vext->sock >= 0) {
+				ret = write(vext->sock, rendered, len + 1);
+				if (ret <= 0) {
+					fprintf(stderr,
+						"%s: Write error on socket.\n",
+						__func__);
+					close(vext->sock);
+					vext->sock = -1;
+				}
+			} else {
+				DBG("%s: Not connected, cannot send command.\n",
+				    __func__);
 			}
 			free(rendered);
 
@@ -166,17 +201,38 @@ static void *vext_emul_event_handle(void *arg) {
 	int alreadyReadBytes = 0;
 	vextEmulState *vext = arg;
 
+	vext_try_connect();
+
 	while (!vext->thread_terminate) {
+		if (vext->sock < 0) {
+			vext_try_connect();
+			continue;
+		}
+
 		/* Read from the socket. */
 		readBytes = read(vext->sock, inBuffer + alreadyReadBytes, sizeof(inBuffer) - alreadyReadBytes);
-		
+
+		if (readBytes < 0) {
+			if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				/* No data available, try again later */
+				continue;
+			}
+
+			/* Connection error */
+			close(vext->sock);
+			vext->sock = -1;
+			alreadyReadBytes = 0;
+			continue;
+		}
+
 		DBG("%s: read %d \n", __FUNCTION__, readBytes);
 
 		if (readBytes == 0) {
-			DBG("%s: Socket error %d \n", __FUNCTION__, errno);
-
-			vext->thread_terminate = 1;
-			qemu_cond_signal(&vext_state.cmd_cond);
+			/* Connection closed by the other side */
+			close(vext->sock);
+			vext->sock = -1;
+			alreadyReadBytes = 0;
+			continue;
 		}
 		/* If something has been read. */
 		if (readBytes > 0)
@@ -237,30 +293,19 @@ static void *vext_emul_event_handle(void *arg) {
 }
 
 int vext_emul_init(Object *obj) {
-	char host[255];
+	DBG("%s\n", __func__);
 
-        DBG("%s\n", __func__);
+	__opaque = SYS_BUS_DEVICE(obj);
 
-        __opaque = SYS_BUS_DEVICE(obj);
-        
 	QSIMPLEQ_INIT(&vext_state.event_list);
 	QSIMPLEQ_INIT(&vext_state.cmd_list);
 
 	qemu_mutex_init(&vext_state.cmd_mutex);
 	qemu_cond_init(&vext_state.cmd_cond);
+	qemu_mutex_init(&vext_state.connect_mutex);
 
 	vext_state.thread_terminate = 0;
-
-	/* Connect to server */
-	snprintf(host, 255, "localhost:%d", TCP_PORT);
-
-	vext_state.sock = inet_connect(host, NULL);
-
-	if (vext_state.sock < 0) {
-		fprintf(stderr, "%s: failed to connect to Sense-HAT server\n", __func__);
-		fprintf(stderr, "%s: terminate thread\n", __func__);
-		return -1;
-	}
+	vext_state.sock = -1;
 
 	/* Thread for output commands */
 	qemu_thread_create(&vext_state.cmdThreadId, "cmd_process",

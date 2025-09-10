@@ -1,9 +1,14 @@
 #ifndef TARGET_ARM_TRANSLATE_H
 #define TARGET_ARM_TRANSLATE_H
 
+#include "cpu.h"
+#include "tcg/tcg-op.h"
+#include "tcg/tcg-op-gvec.h"
+#include "exec/exec-all.h"
 #include "exec/translator.h"
+#include "exec/helper-gen.h"
 #include "internals.h"
-
+#include "cpu-features.h"
 
 /* internal defines */
 
@@ -85,6 +90,7 @@ typedef struct DisasContext {
     uint64_t features; /* CPU features bits */
     bool aarch64;
     bool thumb;
+    bool lse2;
     /* Because unallocated encodings generate different exception syndrome
      * information from traps due to FP being disabled, we can't do a single
      * "is fp access disabled" check at a high level in the decode tree.
@@ -108,8 +114,8 @@ typedef struct DisasContext {
     bool unpriv;
     /* True if v8.3-PAuth is active.  */
     bool pauth_active;
-    /* True if v8.5-MTE access to tags is enabled.  */
-    bool ata;
+    /* True if v8.5-MTE access to tags is enabled; index with is_unpriv.  */
+    bool ata[2];
     /* True if v8.5-MTE tag checks affect the PE; index with is_unpriv.  */
     bool mte_active[2];
     /* True with v8.5-BTI and SCTLR_ELx.BT* set.  */
@@ -136,6 +142,8 @@ typedef struct DisasContext {
     bool fgt_eret;
     /* True if fine-grained trap on SVC is enabled */
     bool fgt_svc;
+    /* True if FEAT_LSE2 SCTLR_ELx.nAA is set */
+    bool naa;
     /*
      * >= 0, a copy of PSTATE.BTYPE, which will be 0 without v8.5-BTI.
      *  < 0, set by the current instruction.
@@ -143,6 +151,8 @@ typedef struct DisasContext {
     int8_t btype;
     /* A copy of cpu->dcz_blocksize. */
     uint8_t dcz_blocksize;
+    /* A copy of cpu->gm_blocksize. */
+    uint8_t gm_blocksize;
     /* True if this page is guarded.  */
     bool guarded_page;
     /* Bottom two bits of XScale c15_cpar coprocessor access control reg */
@@ -195,6 +205,11 @@ static inline int times_4(DisasContext *s, int x)
     return x * 4;
 }
 
+static inline int times_8(DisasContext *s, int x)
+{
+    return x * 8;
+}
+
 static inline int times_2_plus_1(DisasContext *s, int x)
 {
     return x * 2 + 1;
@@ -218,6 +233,11 @@ static inline int rsub_16(DisasContext *s, int x)
 static inline int rsub_8(DisasContext *s, int x)
 {
     return 8 - x;
+}
+
+static inline int shl_12(DisasContext *s, int x)
+{
+    return x << 12;
 }
 
 static inline int neon_3same_fp_size(DisasContext *s, int x)
@@ -314,7 +334,7 @@ static inline TCGv_i32 get_ahp_flag(void)
 {
     TCGv_i32 ret = tcg_temp_new_i32();
 
-    tcg_gen_ld_i32(ret, cpu_env,
+    tcg_gen_ld_i32(ret, tcg_env,
                    offsetof(CPUARMState, vfp.xregs[ARM_VFP_FPSCR]));
     tcg_gen_extract_i32(ret, ret, 26, 1);
 
@@ -328,9 +348,9 @@ static inline void set_pstate_bits(uint32_t bits)
 
     tcg_debug_assert(!(bits & CACHED_PSTATE_BITS));
 
-    tcg_gen_ld_i32(p, cpu_env, offsetof(CPUARMState, pstate));
+    tcg_gen_ld_i32(p, tcg_env, offsetof(CPUARMState, pstate));
     tcg_gen_ori_i32(p, p, bits);
-    tcg_gen_st_i32(p, cpu_env, offsetof(CPUARMState, pstate));
+    tcg_gen_st_i32(p, tcg_env, offsetof(CPUARMState, pstate));
 }
 
 /* Clear bits within PSTATE.  */
@@ -340,9 +360,9 @@ static inline void clear_pstate_bits(uint32_t bits)
 
     tcg_debug_assert(!(bits & CACHED_PSTATE_BITS));
 
-    tcg_gen_ld_i32(p, cpu_env, offsetof(CPUARMState, pstate));
+    tcg_gen_ld_i32(p, tcg_env, offsetof(CPUARMState, pstate));
     tcg_gen_andi_i32(p, p, ~bits);
-    tcg_gen_st_i32(p, cpu_env, offsetof(CPUARMState, pstate));
+    tcg_gen_st_i32(p, tcg_env, offsetof(CPUARMState, pstate));
 }
 
 /* If the singlestep state is Active-not-pending, advance to Active-pending. */
@@ -359,7 +379,7 @@ static inline void gen_swstep_exception(DisasContext *s, int isv, int ex)
 {
     /* Fill in the same_el field of the syndrome in the helper. */
     uint32_t syn = syn_swstep(false, isv, ex);
-    gen_helper_exception_swstep(cpu_env, tcg_constant_i32(syn));
+    gen_helper_exception_swstep(tcg_env, tcg_constant_i32(syn));
 }
 
 /*
@@ -542,17 +562,18 @@ static inline TCGv_ptr fpstatus_ptr(ARMFPStatusFlavour flavour)
     default:
         g_assert_not_reached();
     }
-    tcg_gen_addi_ptr(statusptr, cpu_env, offset);
+    tcg_gen_addi_ptr(statusptr, tcg_env, offset);
     return statusptr;
 }
 
 /**
- * finalize_memop:
+ * finalize_memop_atom:
  * @s: DisasContext
  * @opc: size+sign+align of the memory operation
+ * @atom: atomicity of the memory operation
  *
- * Build the complete MemOp for a memory operation, including alignment
- * and endianness.
+ * Build the complete MemOp for a memory operation, including alignment,
+ * endianness, and atomicity.
  *
  * If (op & MO_AMASK) then the operation already contains the required
  * alignment, e.g. for AccType_ATOMIC.  Otherwise, this an optionally
@@ -562,12 +583,63 @@ static inline TCGv_ptr fpstatus_ptr(ARMFPStatusFlavour flavour)
  * and this is applied here.  Note that there is no way to indicate that
  * no alignment should ever be enforced; this must be handled manually.
  */
-static inline MemOp finalize_memop(DisasContext *s, MemOp opc)
+static inline MemOp finalize_memop_atom(DisasContext *s, MemOp opc, MemOp atom)
 {
     if (s->align_mem && !(opc & MO_AMASK)) {
         opc |= MO_ALIGN;
     }
-    return opc | s->be_data;
+    return opc | atom | s->be_data;
+}
+
+/**
+ * finalize_memop:
+ * @s: DisasContext
+ * @opc: size+sign+align of the memory operation
+ *
+ * Like finalize_memop_atom, but with default atomicity.
+ */
+static inline MemOp finalize_memop(DisasContext *s, MemOp opc)
+{
+    MemOp atom = s->lse2 ? MO_ATOM_WITHIN16 : MO_ATOM_IFALIGN;
+    return finalize_memop_atom(s, opc, atom);
+}
+
+/**
+ * finalize_memop_pair:
+ * @s: DisasContext
+ * @opc: size+sign+align of the memory operation
+ *
+ * Like finalize_memop_atom, but with atomicity for a pair.
+ * C.f. Pseudocode for Mem[], operand ispair.
+ */
+static inline MemOp finalize_memop_pair(DisasContext *s, MemOp opc)
+{
+    MemOp atom = s->lse2 ? MO_ATOM_WITHIN16_PAIR : MO_ATOM_IFALIGN_PAIR;
+    return finalize_memop_atom(s, opc, atom);
+}
+
+/**
+ * finalize_memop_asimd:
+ * @s: DisasContext
+ * @opc: size+sign+align of the memory operation
+ *
+ * Like finalize_memop_atom, but with atomicity of AccessType_ASIMD.
+ */
+static inline MemOp finalize_memop_asimd(DisasContext *s, MemOp opc)
+{
+    /*
+     * In the pseudocode for Mem[], with AccessType_ASIMD, size == 16,
+     * if IsAligned(8), the first case provides separate atomicity for
+     * the pair of 64-bit accesses.  If !IsAligned(8), the middle cases
+     * do not apply, and we're left with the final case of no atomicity.
+     * Thus MO_ATOM_IFALIGN_PAIR.
+     *
+     * For other sizes, normal LSE2 rules apply.
+     */
+    if ((opc & MO_SIZE) == MO_128) {
+        return finalize_memop_atom(s, opc, MO_ATOM_IFALIGN_PAIR);
+    }
+    return finalize_memop(s, opc);
 }
 
 /**
@@ -612,7 +684,7 @@ static inline void set_disas_label(DisasContext *s, DisasLabel l)
 static inline TCGv_ptr gen_lookup_cp_reg(uint32_t key)
 {
     TCGv_ptr ret = tcg_temp_new_ptr();
-    gen_helper_lookup_cp_reg(ret, cpu_env, tcg_constant_i32(key));
+    gen_helper_lookup_cp_reg(ret, tcg_env, tcg_constant_i32(key));
     return ret;
 }
 

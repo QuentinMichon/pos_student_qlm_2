@@ -56,7 +56,6 @@
 
 /* Supported chipsets: */
 #include "hw/southbridge/ich9.h"
-#include "hw/southbridge/piix.h"
 #include "hw/acpi/pcihp.h"
 #include "hw/i386/fw_cfg.h"
 #include "hw/i386/pc.h"
@@ -242,10 +241,6 @@ static void acpi_get_pm_info(MachineState *machine, AcpiPmInfo *pm)
     pm->pcihp_io_len =
         object_property_get_uint(obj, ACPI_PCIHP_IO_LEN_PROP, NULL);
 
-    /* The above need not be conditional on machine type because the reset port
-     * happens to be the same on PIIX (pc) and ICH9 (q35). */
-    QEMU_BUILD_BUG_ON(ICH9_RST_CNT_IOPORT != PIIX_RCR_IOPORT);
-
     /* Fill in optional s3/s4 related properties */
     o = object_property_get_qobject(obj, ACPI_PM_PROP_S3_DISABLED, NULL);
     if (o) {
@@ -362,9 +357,13 @@ Aml *aml_pci_device_dsm(void)
     {
         Aml *params = aml_local(0);
         Aml *pkg = aml_package(2);
-        aml_append(pkg, aml_name("BSEL"));
-        aml_append(pkg, aml_name("ASUN"));
+        aml_append(pkg, aml_int(0));
+        aml_append(pkg, aml_int(0));
         aml_append(method, aml_store(pkg, params));
+        aml_append(method,
+            aml_store(aml_name("BSEL"), aml_index(params, aml_int(0))));
+        aml_append(method,
+            aml_store(aml_name("ASUN"), aml_index(params, aml_int(1))));
         aml_append(method,
             aml_return(aml_call5("PDSM", aml_arg(0), aml_arg(1),
                                  aml_arg(2), aml_arg(3), params))
@@ -775,7 +774,7 @@ static Aml *initialize_route(Aml *route, const char *link_name,
  *
  * Returns an array of 128 routes, one for each device,
  * based on device location.
- * The main goal is to equaly distribute the interrupts
+ * The main goal is to equally distribute the interrupts
  * over the 4 existing ACPI links (works only for i440fx).
  * The hash function is  (slot + pin) & 3 -> "LNK[D|A|B|C]".
  *
@@ -1416,8 +1415,9 @@ static void build_acpi0017(Aml *table)
     aml_append(dev, aml_name_decl("_HID", aml_string("ACPI0017")));
 
     method = aml_method("_STA", 0, AML_NOTSERIALIZED);
-    aml_append(method, aml_return(aml_int(0x01)));
+    aml_append(method, aml_return(aml_int(0x0B)));
     aml_append(dev, method);
+    build_cxl_dsm_method(dev);
 
     aml_append(scope, dev);
     aml_append(table, scope);
@@ -1460,7 +1460,6 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
         sb_scope = aml_scope("_SB");
         dev = aml_device("PCI0");
         aml_append(dev, aml_name_decl("_HID", aml_eisaid("PNP0A03")));
-        aml_append(dev, aml_name_decl("_ADR", aml_int(0)));
         aml_append(dev, aml_name_decl("_UID", aml_int(pcmc->pci_root_uid)));
         aml_append(dev, aml_pci_edsm());
         aml_append(sb_scope, dev);
@@ -1475,7 +1474,6 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
         dev = aml_device("PCI0");
         aml_append(dev, aml_name_decl("_HID", aml_eisaid("PNP0A08")));
         aml_append(dev, aml_name_decl("_CID", aml_eisaid("PNP0A03")));
-        aml_append(dev, aml_name_decl("_ADR", aml_int(0)));
         aml_append(dev, aml_name_decl("_UID", aml_int(pcmc->pci_root_uid)));
         aml_append(dev, build_q35_osc_method(!pm->pcihp_bridge_en));
         aml_append(dev, aml_pci_edsm());
@@ -1493,14 +1491,14 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
             aml_append(crs,
                 aml_io(
                        AML_DECODE16,
-                       ACPI_PORT_SMI_CMD,
-                       ACPI_PORT_SMI_CMD,
+                       pm->fadt.smi_cmd,
+                       pm->fadt.smi_cmd,
                        1,
                        2)
             );
             aml_append(dev, aml_name_decl("_CRS", crs));
             aml_append(dev, aml_operation_region("SMIR", AML_SYSTEM_IO,
-                aml_int(ACPI_PORT_SMI_CMD), 2));
+                aml_int(pm->fadt.smi_cmd), 2));
             field = aml_field("SMIR", AML_BYTE_ACC, AML_NOLOCK,
                               AML_WRITE_AS_ZEROS);
             aml_append(field, aml_named_field("SMIC", 8));
@@ -1547,8 +1545,8 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
             .smi_path = pm->smi_on_cpuhp ? "\\_SB.PCI0.SMI0.SMIC" : NULL,
             .fw_unplugs_cpu = pm->smi_on_cpu_unplug,
         };
-        build_cpus_aml(dsdt, machine, opts, pm->cpu_hp_io_base,
-                       "\\_SB.PCI0", "\\_GPE._E02");
+        build_cpus_aml(dsdt, machine, opts, pc_madt_cpu_entry,
+                       pm->cpu_hp_io_base, "\\_SB.PCI0", "\\_GPE._E02");
     }
 
     if (pcms->memhp_io_base && nr_mem) {
@@ -1583,13 +1581,12 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
             aml_append(dev, aml_name_decl("_UID", aml_int(bus_num)));
             aml_append(dev, aml_name_decl("_BBN", aml_int(bus_num)));
             if (pci_bus_is_cxl(bus)) {
-                struct Aml *pkg = aml_package(2);
+                struct Aml *aml_pkg = aml_package(2);
 
                 aml_append(dev, aml_name_decl("_HID", aml_string("ACPI0016")));
-                aml_append(pkg, aml_eisaid("PNP0A08"));
-                aml_append(pkg, aml_eisaid("PNP0A03"));
-                aml_append(dev, aml_name_decl("_CID", pkg));
-                aml_append(dev, aml_name_decl("_ADR", aml_int(0)));
+                aml_append(aml_pkg, aml_eisaid("PNP0A08"));
+                aml_append(aml_pkg, aml_eisaid("PNP0A03"));
+                aml_append(dev, aml_name_decl("_CID", aml_pkg));
                 build_cxl_osc_method(dev);
             } else if (pci_bus_is_express(bus)) {
                 aml_append(dev, aml_name_decl("_HID", aml_eisaid("PNP0A08")));
@@ -1782,14 +1779,14 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
         Object *pci_host = acpi_get_i386_pci_host();
 
         if (pci_host) {
-            PCIBus *bus = PCI_HOST_BRIDGE(pci_host)->bus;
-            Aml *scope = aml_scope("PCI0");
+            PCIBus *pbus = PCI_HOST_BRIDGE(pci_host)->bus;
+            Aml *ascope = aml_scope("PCI0");
             /* Scan all PCI buses. Generate tables to support hotplug. */
-            build_append_pci_bus_devices(scope, bus);
-            if (object_property_find(OBJECT(bus), ACPI_PCIHP_PROP_BSEL)) {
-                build_append_pcihp_slots(scope, bus);
+            build_append_pci_bus_devices(ascope, pbus);
+            if (object_property_find(OBJECT(pbus), ACPI_PCIHP_PROP_BSEL)) {
+                build_append_pcihp_slots(ascope, pbus);
             }
-            aml_append(sb_scope, scope);
+            aml_append(sb_scope, ascope);
         }
     }
 
@@ -1841,10 +1838,10 @@ build_dsdt(GArray *table_data, BIOSLinker *linker,
         bool has_pcnt;
 
         Object *pci_host = acpi_get_i386_pci_host();
-        PCIBus *bus = PCI_HOST_BRIDGE(pci_host)->bus;
+        PCIBus *b = PCI_HOST_BRIDGE(pci_host)->bus;
 
         scope = aml_scope("\\_SB.PCI0");
-        has_pcnt = build_append_notfication_callback(scope, bus);
+        has_pcnt = build_append_notfication_callback(scope, b);
         if (has_pcnt) {
             aml_append(dsdt, scope);
         }
@@ -1950,12 +1947,8 @@ build_srat(GArray *table_data, BIOSLinker *linker, MachineState *machine)
     MachineClass *mc = MACHINE_GET_CLASS(machine);
     X86MachineState *x86ms = X86_MACHINE(machine);
     const CPUArchIdList *apic_ids = mc->possible_cpu_arch_ids(machine);
-    PCMachineState *pcms = PC_MACHINE(machine);
     int nb_numa_nodes = machine->numa_state->num_nodes;
     NodeInfo *numa_info = machine->numa_state->nodes;
-    ram_addr_t hotpluggable_address_space_size =
-        object_property_get_int(OBJECT(pcms), PC_MACHINE_DEVMEM_REGION_SIZE,
-                                NULL);
     AcpiTable table = { .sig = "SRAT", .rev = 1, .oem_id = x86ms->oem_id,
                         .oem_table_id = x86ms->oem_table_id };
 
@@ -2071,9 +2064,10 @@ build_srat(GArray *table_data, BIOSLinker *linker, MachineState *machine)
      * Memory devices may override proximity set by this entry,
      * providing _PXM method if necessary.
      */
-    if (hotpluggable_address_space_size) {
+    if (machine->device_memory) {
         build_srat_memory(table_data, machine->device_memory->base,
-                          hotpluggable_address_space_size, nb_numa_nodes - 1,
+                          memory_region_size(&machine->device_memory->mr),
+                          nb_numa_nodes - 1,
                           MEM_AFFINITY_HOTPLUGGABLE | MEM_AFFINITY_ENABLED);
     }
 
@@ -2081,7 +2075,7 @@ build_srat(GArray *table_data, BIOSLinker *linker, MachineState *machine)
 }
 
 /*
- * Insert DMAR scope for PCI bridges and endpoint devcie
+ * Insert DMAR scope for PCI bridges and endpoint devices
  */
 static void
 insert_scope(PCIBus *bus, PCIDevice *dev, void *opaque)
@@ -2395,9 +2389,11 @@ build_amd_iommu(GArray *table_data, BIOSLinker *linker, const char *oem_id,
     /* IVHD length */
     build_append_int_noprefix(table_data, ivhd_table_len, 2);
     /* DeviceID */
-    build_append_int_noprefix(table_data, s->devid, 2);
+    build_append_int_noprefix(table_data,
+                              object_property_get_int(OBJECT(&s->pci), "addr",
+                                                      &error_abort), 2);
     /* Capability offset */
-    build_append_int_noprefix(table_data, s->capab_offset, 2);
+    build_append_int_noprefix(table_data, s->pci.capab_offset, 2);
     /* IOMMU base address */
     build_append_int_noprefix(table_data, s->mmio.addr, 8);
     /* PCI Segment Group */
@@ -2547,8 +2543,7 @@ void acpi_build(AcpiBuildTables *tables, MachineState *machine)
 
     acpi_add_table(table_offsets, tables_blob);
     acpi_build_madt(tables_blob, tables->linker, x86ms,
-                    ACPI_DEVICE_IF(x86ms->acpi_dev), x86ms->oem_id,
-                    x86ms->oem_table_id);
+                    x86ms->oem_id, x86ms->oem_table_id);
 
 #ifdef CONFIG_ACPI_ERST
     {
@@ -2695,7 +2690,8 @@ void acpi_build(AcpiBuildTables *tables, MachineState *machine)
         int legacy_table_size =
             ROUND_UP(tables_blob->len - aml_len + legacy_aml_len,
                      ACPI_BUILD_ALIGN_SIZE);
-        if (tables_blob->len > legacy_table_size) {
+        if ((tables_blob->len > legacy_table_size) &&
+            !pcmc->resizable_acpi_blob) {
             /* Should happen only with PCI bridges and -M pc-i440fx-2.0.  */
             warn_report("ACPI table size %u exceeds %d bytes,"
                         " migration may not work",
@@ -2706,7 +2702,8 @@ void acpi_build(AcpiBuildTables *tables, MachineState *machine)
         g_array_set_size(tables_blob, legacy_table_size);
     } else {
         /* Make sure we have a buffer in case we need to resize the tables. */
-        if (tables_blob->len > ACPI_BUILD_TABLE_SIZE / 2) {
+        if ((tables_blob->len > ACPI_BUILD_TABLE_SIZE / 2) &&
+            !pcmc->resizable_acpi_blob) {
             /* As of QEMU 2.1, this fires with 160 VCPUs and 255 memory slots.  */
             warn_report("ACPI table size %u exceeds %d bytes,"
                         " migration may not work",

@@ -1239,6 +1239,8 @@ static void ohci_frame_boundary(void *opaque)
     /* Increment frame number and take care of endianness. */
     ohci->frame_number = (ohci->frame_number + 1) & 0xffff;
     hcca.frame = cpu_to_le16(ohci->frame_number);
+    /* When the HC updates frame number, set pad to 0. Ref OHCI Spec 4.4.1*/
+    hcca.pad = 0;
 
     if (ohci->done_count == 0 && !(ohci->intr_status & OHCI_INTR_WD)) {
         if (!ohci->done) {
@@ -1353,7 +1355,7 @@ static uint32_t ohci_get_frame_remaining(OHCIState *ohci)
     if ((ohci->ctl & OHCI_CTL_HCFS) != OHCI_USB_OPERATIONAL) {
         return ohci->frt << 31;
     }
-    /* Being in USB operational state guarnatees sof_time was set already. */
+    /* Being in USB operational state guarantees sof_time was set already. */
     tks = qemu_clock_get_ns(QEMU_CLOCK_VIRTUAL) - ohci->sof_time;
     if (tks < 0) {
         tks = 0;

@@ -9,6 +9,6 @@ Configure options:
 
 AArch32 version:
 
-./configure --target-list=arm-softmmu,aarch64-softmmu --disable-attr --disable-werror --disable-docs
+./configure --target-list=arm-softmmu,aarch64-softmmu --disable-attr --disable-werror --disable-docs 
 
  

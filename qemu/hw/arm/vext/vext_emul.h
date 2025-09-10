@@ -22,7 +22,11 @@
 
 #include "json/cjson.h"
 
+#define TCP_HOSTNAME "172.17.0.1"
 #define TCP_PORT  4442
+
+#define CONNECT_RETRIES 10
+#define CONNECT_WAIT 2 /* seconds */
 
 #define DEV_LED 	"led"
 #define DEV_LCD 	"lcd"

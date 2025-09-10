@@ -107,16 +107,25 @@ typedef struct CPUArchState {
  * A RX CPU
  */
 struct ArchCPU {
-    /*< private >*/
     CPUState parent_obj;
-    /*< public >*/
 
-    CPUNegativeOffsetState neg;
     CPURXState env;
 };
 
-#define RX_CPU_TYPE_SUFFIX "-" TYPE_RX_CPU
-#define RX_CPU_TYPE_NAME(model) model RX_CPU_TYPE_SUFFIX
+/*
+ * RXCPUClass:
+ * @parent_realize: The parent class' realize handler.
+ * @parent_phases: The parent class' reset phase handlers.
+ *
+ * A RX CPU model.
+ */
+struct RXCPUClass {
+    CPUClass parent_class;
+
+    DeviceRealize parent_realize;
+    ResettablePhases parent_phases;
+};
+
 #define CPU_RESOLVING_TYPE TYPE_RX_CPU
 
 const char *rx_crname(uint8_t cr);
@@ -143,8 +152,8 @@ void rx_cpu_unpack_psw(CPURXState *env, uint32_t psw, int rte);
 #define RX_CPU_IRQ 0
 #define RX_CPU_FIR 1
 
-static inline void cpu_get_tb_cpu_state(CPURXState *env, target_ulong *pc,
-                                        target_ulong *cs_base, uint32_t *flags)
+static inline void cpu_get_tb_cpu_state(CPURXState *env, vaddr *pc,
+                                        uint64_t *cs_base, uint32_t *flags)
 {
     *pc = env->pc;
     *cs_base = 0;

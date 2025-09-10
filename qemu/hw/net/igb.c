@@ -78,6 +78,7 @@ struct IGBState {
     uint32_t ioaddr;
 
     IGBCore core;
+    bool has_flr;
 };
 
 #define IGB_CAP_SRIOV_OFFSET    (0x160)
@@ -101,6 +102,9 @@ static void igb_write_config(PCIDevice *dev, uint32_t addr,
 
     trace_igb_write_config(addr, val, len);
     pci_default_write_config(dev, addr, val, len);
+    if (s->has_flr) {
+        pcie_cap_flr_write_config(dev, addr, val, len);
+    }
 
     if (range_covers_byte(addr, len, PCI_COMMAND) &&
         (dev->config[PCI_COMMAND] & PCI_COMMAND_MASTER)) {
@@ -120,6 +124,12 @@ igb_mmio_write(void *opaque, hwaddr addr, uint64_t val, unsigned size)
 {
     IGBState *s = opaque;
     igb_core_write(&s->core, addr, val, size);
+}
+
+void igb_vf_reset(void *opaque, uint16_t vfn)
+{
+    IGBState *s = opaque;
+    igb_core_vf_reset(&s->core, vfn);
 }
 
 static bool
@@ -315,7 +325,7 @@ igb_init_net_peer(IGBState *s, PCIDevice *pci_dev, uint8_t *macaddr)
     int i;
 
     s->nic = qemu_new_nic(&net_igb_info, &s->conf,
-        object_get_typename(OBJECT(s)), dev->id, s);
+        object_get_typename(OBJECT(s)), dev->id, &dev->mem_reentrancy_guard, s);
 
     s->core.max_queue_num = s->conf.peers.queues ? s->conf.peers.queues - 1 : 0;
 
@@ -427,22 +437,26 @@ static void igb_pci_realize(PCIDevice *pci_dev, Error **errp)
     }
 
     /* PCIe extended capabilities (in order) */
+    if (s->has_flr) {
+        pcie_cap_flr_init(pci_dev);
+    }
+
     if (pcie_aer_init(pci_dev, 1, 0x100, 0x40, errp) < 0) {
         hw_error("Failed to initialize AER capability");
     }
 
-    pcie_ari_init(pci_dev, 0x150, 1);
+    pcie_ari_init(pci_dev, 0x150);
 
-    pcie_sriov_pf_init(pci_dev, IGB_CAP_SRIOV_OFFSET, "igbvf",
+    pcie_sriov_pf_init(pci_dev, IGB_CAP_SRIOV_OFFSET, TYPE_IGBVF,
         IGB_82576_VF_DEV_ID, IGB_MAX_VF_FUNCTIONS, IGB_MAX_VF_FUNCTIONS,
         IGB_VF_OFFSET, IGB_VF_STRIDE);
 
-    pcie_sriov_pf_init_vf_bar(pci_dev, 0,
+    pcie_sriov_pf_init_vf_bar(pci_dev, IGBVF_MMIO_BAR_IDX,
         PCI_BASE_ADDRESS_MEM_TYPE_64 | PCI_BASE_ADDRESS_MEM_PREFETCH,
-        16 * KiB);
-    pcie_sriov_pf_init_vf_bar(pci_dev, 3,
+        IGBVF_MMIO_SIZE);
+    pcie_sriov_pf_init_vf_bar(pci_dev, IGBVF_MSIX_BAR_IDX,
         PCI_BASE_ADDRESS_MEM_TYPE_64 | PCI_BASE_ADDRESS_MEM_PREFETCH,
-        16 * KiB);
+        IGBVF_MSIX_SIZE);
 
     igb_init_net_peer(s, pci_dev, macaddr);
 
@@ -582,6 +596,7 @@ static const VMStateDescription igb_vmstate = {
 
 static Property igb_properties[] = {
     DEFINE_NIC_PROPERTIES(IGBState, conf),
+    DEFINE_PROP_BOOL("x-pcie-flr-init", IGBState, has_flr, true),
     DEFINE_PROP_END_OF_LIST(),
 };
 

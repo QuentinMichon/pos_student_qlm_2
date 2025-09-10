@@ -7,13 +7,13 @@ import subprocess
 import io
 import os
 import threading
-import signal 
+import signal
 import sys
 import fcntl
 
-from sense_emu import *
+from sense_emu import SenseHat
 
-HOST = '127.0.0.1'  # Standard loopback interface address (localhost)
+HOST = '0.0.0.0'  # All addresses
 PORT = 4442        # Port to listen for qemu client
 
 # Draw the foreground (fg) into a numpy array
@@ -46,7 +46,7 @@ leds = [
     __, __, __, __, __, __, __, __,
     __, __, __, __, __, __, __, __,
     ],
-    
+
     [
     __, __, __, __, __, __, __, __,
     __, __, __, __, __, __, __, __,
@@ -79,7 +79,7 @@ leds = [
     __, __, __, __, __, __, __, __,
     __, __, __, __, __, __, __, __,
     ],
-   
+
    [
     __, __, __, __, __, __, __, __,
     __, __, __, __, __, __, __, __,
@@ -97,50 +97,38 @@ def display(hat, selection):
     # Construct final pixels from bg array with non-transparent elements of
     # the menu array
     current = hat.get_pixels()
-    
+
     m1 = np.array(current)
     m2 = np.array(leds[selection])
-    
+
     result = m1 | m2
 
     hat.set_pixels(result)
 
 devnull=io.open(os.devnull, 'r+b')
 setpgrp = None
-        
+
+sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+try:
+    sock.bind((HOST, PORT))
+except socket.error as msg:
+        print('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
+        sys.exit()
+print('Socket bind complete')
+
+#Start listening on socket
+sock.listen(1)
+print('Socket now listening')
+conn = None
+
 subprocess.Popen(['sense_emu_gui'], preexec_fn=setpgrp,
                          stdin=devnull, stdout=devnull, stderr=devnull,
                          close_fds=True)
 
 sense = SenseHat()
 sense.set_pixels(ledsoff)
-
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-try:
-    s.bind((HOST, PORT))
-except socket.error as msg:
-
-        print('Bind failed. Error Code : ' + str(msg[0]) + ' Message ' + msg[1])
-        sys.exit()
-    
-print('Socket bind complete')
-
-print("Sending SIGUSR1 to PID " + sys.argv[1])
-
-# Inform qemu we are ready to proceed
-os.kill(int(sys.argv[1]), signal.SIGUSR1)
-
-#Start listening on socket
-s.listen(1)
-print('Socket now listening')
-
-#now keep talking with the client
- 
-#wait to accept a connection - blocking call
-conn, addr = s.accept()
-print('Connected with ' + addr[0] + ':' + str(addr[1]))
 
 # Prepare to process joystick events
 
@@ -158,15 +146,18 @@ def stick_event(event):
             obj = json.dumps({'device':'switch', 'status':8})
         if event.direction == "down":
             obj = json.dumps({'device':'switch', 'status':16})
-            
-    if event.action == "released":        
+
+    if event.action == "released":
         obj = json.dumps({'device':'switch', 'status':0})
-    
+
     # Send to qemu
     if (obj != None):
+        if conn == None:
+            print("[sense-hat GUI] No connection to client, cannot send event")
+            return
         #print(obj)
         conn.sendall(bytes(obj+"\n", 'utf-8'))
- 
+
 # Switch nr 0
 sense.stick.direction_middle = stick_event
 
@@ -175,7 +166,7 @@ sense.stick.direction_left = stick_event
 
 # Switch nr 2
 sense.stick.direction_up = stick_event
- 
+
 # Switch nr 3
 sense.stick.direction_right = stick_event
 
@@ -203,25 +194,31 @@ def set_blocking(fileno):
 stdout = sys.stdout.fileno()
 set_blocking(stdout)
 
+#wait to accept a connection - blocking call
+conn, addr = sock.accept()
+print('Connected with ' + addr[0] + ':' + str(addr[1]))
+
 while True:
-         data = conn.recv(1024)
-         if not data:
-                break
-            
-         packets = data.split()
-         for s in packets:
-             print("[sense-hat GUI] Got JSON packet" + str(s))
-             obj = json.loads(s)
-             if obj["device"] == "led":
-                 # Reset all LEDs
-                 sense.set_pixels(ledsoff)
-                 val = obj["value"]
-                 
-                 print("[sense-hat GUI] device LED detected (value "+str(val)+")")
-                 
-                 for led in range(5):
-                     if (val & (1 << led) != 0):
-                         display(sense, led)
-                    
- 
-        
+    data = conn.recv(1024)
+    if not data:
+        print("[sense-hat GUI] Connection closed by client")
+        conn.close()
+        conn = None
+        conn, addr = sock.accept()
+        print('Connected with ' + addr[0] + ':' + str(addr[1]))
+        continue
+
+    packets = data.split()
+    for s in packets:
+        print("[sense-hat GUI] Got JSON packet" + str(s))
+        obj = json.loads(s)
+        if obj["device"] == "led":
+            # Reset all LEDs
+            sense.set_pixels(ledsoff)
+            val = obj["value"]
+
+            print("[sense-hat GUI] device LED detected (value "+str(val)+")")
+
+            for led in range(5):
+                if (val & (1 << led) != 0):
+                    display(sense, led)

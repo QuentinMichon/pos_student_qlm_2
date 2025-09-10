@@ -164,14 +164,24 @@ typedef struct CPUArchState {
  * A Motorola 68k CPU.
  */
 struct ArchCPU {
-    /*< private >*/
     CPUState parent_obj;
-    /*< public >*/
 
-    CPUNegativeOffsetState neg;
     CPUM68KState env;
 };
 
+/*
+ * M68kCPUClass:
+ * @parent_realize: The parent class' realize handler.
+ * @parent_phases: The parent class' reset phase handlers.
+ *
+ * A Motorola 68k CPU model.
+ */
+struct M68kCPUClass {
+    CPUClass parent_class;
+
+    DeviceRealize parent_realize;
+    ResettablePhases parent_phases;
+};
 
 #ifndef CONFIG_USER_ONLY
 void m68k_cpu_do_interrupt(CPUState *cpu);
@@ -564,8 +574,6 @@ enum {
     ACCESS_DATA  = 0x20, /* Data load/store access        */
 };
 
-#define M68K_CPU_TYPE_SUFFIX "-" TYPE_M68K_CPU
-#define M68K_CPU_TYPE_NAME(model) model M68K_CPU_TYPE_SUFFIX
 #define CPU_RESOLVING_TYPE TYPE_M68K_CPU
 
 #define cpu_list m68k_cpu_list
@@ -601,8 +609,8 @@ void m68k_cpu_transaction_failed(CPUState *cs, hwaddr physaddr, vaddr addr,
 #define TB_FLAGS_TRACE          16
 #define TB_FLAGS_TRACE_BIT      (1 << TB_FLAGS_TRACE)
 
-static inline void cpu_get_tb_cpu_state(CPUM68KState *env, target_ulong *pc,
-                                        target_ulong *cs_base, uint32_t *flags)
+static inline void cpu_get_tb_cpu_state(CPUM68KState *env, vaddr *pc,
+                                        uint64_t *cs_base, uint32_t *flags)
 {
     *pc = env->pc;
     *cs_base = 0;

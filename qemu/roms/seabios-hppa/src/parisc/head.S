@@ -1,21 +1,36 @@
 /*
  * Startup glue code for parisc firmware
  *
- *   (C) 2017-2021 Helge Deller <deller@gmx.de>
+ *   (C) 2017-2024 Helge Deller <deller@gmx.de>
  */
 
+#include "parisc/hppa.h"
 #include "parisc/hppa_hardware.h"
 #include "autoconf.h"
 #include "autoversion.h"
 
 	/* load 32-bit 'value' into 'reg' compensating for the ldil
-	 * sign-extension when running in wide mode.
-	 * WARNING!! neither 'value' nor 'reg' can be expressions
-	 * containing '.'!!!! */
+	 * sign-extension when running in wide mode. */
 	.macro	load32 value, reg
 	ldil	L%\value, \reg
 	ldo	R%\value(\reg), \reg
+#ifdef CONFIG_64BIT
+	depdi   0, 31, 32, \reg
+#endif
 	.endm
+
+	/* set upper 32-bits of firmware address */
+	.macro	load_fw_upper32 reg
+#ifdef CONFIG_64BIT
+	depdi   FIRMWARE_HIGH, 31, 32, \reg
+#endif
+	.endm
+
+;! set the W bit
+#define set_PSW_W	.level 2.0 !	ssm PSW_W_SM, %r0 !	.level LEVEL
+
+;! nuke the W bit
+#define clear_PSW_W	.level 2.0 !	rsm PSW_W_SM, %r0 !	.level LEVEL
 
 #define ENTRY(name) \
 	.export name !\
@@ -32,11 +47,18 @@ name:
 #define BOOTADDR(x)	(x)
 
 	.macro loadgp
+#ifdef CONFIG_64BIT
+	ldil		L%__gp, %r27
+	ldo		R%__gp(%r27), %r27
+	load_fw_upper32	%r27
+#else
 	ldil		L%$global$, %r27
 	ldo		R%$global$(%r27), %r27
+#endif
 	.endm
 
 #ifdef CONFIG_64BIT
+#define LEVEL	2.0w
 #define LDREG	ldd
 #define STREG	std
 #define LDREGX  ldd,s
@@ -52,6 +74,7 @@ name:
 #define WORD_LEN 8
 #define INT_LEN 4
 #else	/* CONFIG_64BIT */
+#define LEVEL	1.1
 #define LDREG	ldw
 #define STREG	stw
 #define LDREGX  ldwx,s
@@ -68,9 +91,18 @@ name:
 #define INT_LEN 4
 #endif
 
+/* various control register and irq bits */
+#define PSW_I		1
+#define PSW_Q		8
+#define CR_EIRR		23
+#define CR_IVA		14
+#define CR_EIEM		15
+#define PSW_W_SM	0x200
+#define PSW_W_BIT       36
+
 	.import	$global$
 	.section ".head.text","ax"
-	 .level 1.1
+	 .level LEVEL
 
 	/* On HPMC, the CPUs will start here at 0xf0000000 */
 hpmc_entry:
@@ -81,8 +113,8 @@ reset_entry:
 	b,n startup
 
 marker:
-	/* file identification */
-	.stringz "PA-RISC/HPPA PDC Firmware (SeaBIOS fork)"
+	/* file identification, useful for strings command on binary file to see version. */
+	.stringz "PA-RISC/HPPA PDC Firmware " SEABIOS_HPPA_VERSION_STR " (SeaBIOS fork)"
 	.stringz "https://github.com/hdeller/seabios-hppa"
 	.stringz BUILD_VERSION
 
@@ -92,6 +124,43 @@ marker:
 
         .align 0x80
 ENTRY(startup)
+	rsm	PSW_I, %r0	/* disable local irqs */
+	ssm	PSW_Q, %r0	/* enable PSW_Q flag */
+
+#ifdef CONFIG_64BIT
+	/* check if we really run on 64-bit CPU */
+	ldo	-1(%r0), %r1
+	mtctl	%r1,%cr11
+	mfctl,w %cr11, %r1
+	ldo	-31(%r1),%r1
+	cmpib,<>,n 0,%r1,1f
+	.word 0xfffdead0	/* immediately halt the emulator */
+1:
+	/* we now know we run on a 64-bit CPU. */
+	/* next step: turn on the PSW.W flag (enable 64-bit mode) */
+	load32		2f,%r11
+	load_fw_upper32 %r11
+
+	mtctl           %r0,%cr17       /* Clear IIASQ tail */
+	mtctl           %r0,%cr17       /* Clear IIASQ head */
+
+	/* Load RFI target into PC queue */
+	mtctl           %r11,%cr18      /* IIAOQ head */
+	ldo             4(%r11),%r11
+	mtctl           %r11,%cr18      /* IIAOQ tail */
+
+	load32          (0x08000000 | PSW_Q),%r10 /* PSW.W=1 */
+	mtctl           %r10,%ipsw
+
+	/* Jump through hyperspace to enable PSW.W */
+	rfi
+	nop
+2:
+#else
+	/* clear any PSW.W on 32-bit firmware */
+	clear_PSW_W
+#endif
+
 	/* Make sure space registers are set to zero */
 	mtsp    %r0,%sr0
 	mtsp    %r0,%sr1
@@ -102,13 +171,24 @@ ENTRY(startup)
 	mtsp    %r0,%sr6
 	mtsp    %r0,%sr7
 
-#define PSW_W_SM	0x200
-#define PSW_W_BIT       36
+	/* If CPU HPA is already set in CPU_HPA_CR_REG then the
+	 * CPU is already initialized and the machine was only reset */
+	mfctl   CPU_HPA_CR_REG, %r1
+	comib,= 0,%r1,$startup_fresh_booted
+	nop
 
-	;! nuke the W bit
-	.level 2.0
-	rsm	PSW_W_SM, %r0
-	.level 1.1
+$startup_just_rebooted:
+	/* Get current CPU HPA. It was stored there at initial bootup. */
+	mfctl   CPU_HPA_CR_REG, %r5
+
+	/* branch if this is the monarch cpu */
+	load32 CPU_HPA, %r1
+	comb,=,n %r5,%r1,$is_monarch_cpu_reboot
+
+	b,n	enter_smp_idle_loop
+
+$startup_fresh_booted:
+	/* Here the machine was booted from scratch: */
 
 	/* Save CPU HPA in cr7, hopefully HP-UX will not use that register. */
 	mtctl   %r5, CPU_HPA_CR_REG /* store CPU HPA */
@@ -122,52 +202,61 @@ ENTRY(enter_smp_idle_loop)
 	/* IDLE LOOP for SMP CPUs - wait for rendenzvous. */
 	mfctl   CPU_HPA_CR_REG, %r25 /* get CPU HPA from cr7 */
 
-#define PSW_I 1
 	rsm	PSW_I, %r0	/* disable local irqs */
+	mtctl	%r0, CR_EIEM	/* disable all external irqs */
 
 	/* EIRR : clear all pending external intr */
-#define CR_EIRR 23
 	load32	-1,%r1
 	mtctl	%r1, CR_EIRR
 	mfctl	CR_EIRR, %r0
 	mtctl	%r0, CR_EIRR
 
 	/* Load IVT for SMT tiny loop exit */
-#define CR_IVA 14
 	load32	BOOTADDR(smp_ivt),%r1
 	mtctl	%r1, CR_IVA
 
 	/* enable CPU local interrupts */
-#define CR_EIEM 15
 	load32	1<<31, %r1	/* allow IRQ0 (Timer) */
 	mtctl	%r1, CR_EIEM
 	ssm	PSW_I, %r0	/* enable local irqs */
 
-	/* endless idle loop, exits to $smp_exit_loop by IRQ only */
+	/* endless idle loop for secondary CPUs. Exits to $smp_exit_loop by IRQ only */
 $smp_idle_loop:
 	b $smp_idle_loop
-	or %r10,%r10,%r10
+	or %r10,%r10,%r10	/* qemu sleep instruction */
 
 $smp_exit_loop:
-	mtctl	%r0, CR_EIEM
 	rsm	PSW_I, %r0	/* disable local irqs */
+	mtctl	%r0, CR_EIEM
 
-	/* tell QEMU to drop all local TLB entries. */
-	pdtlbe	%r0(%sr1,%r0)
-
-	/* on 64bit: Address of PDCE_PROC for each non-monarch processor in GR26. */
-	load32	BOOTADDR(pdc_entry), %r26
+	/* provide PDCE_PROC entry in arg0 (required on 64-bit) */
+	load32	MEM_PDC_ENTRY, %arg0
 
 	/* jump to rendevouz */
 	ldw	0x10(%r0),%r3	/* MEM_RENDEZ */
 	/* ldw	0x28(%r0),%r0	MEM_RENDEZ_HI - assume addr < 4GB */
-	load32	enter_smp_idle_loop, %rp
+	cmpb,=,n  %r0,%r3,enter_smp_idle_loop
+	nop			/* failed backward branch is nullified */
+	load32	startup, %rp
+	load_fw_upper32 %rp
 	bv,n	0(%r3)
 
-
 $is_monarch_cpu:
+	/* Save boot_args in PAGE0->pad608[]. Only monarch CPU does this once. */
+        load32          BOOTADDR(0x608),%r1
+        STREGM          %r26,WORD_LEN(%r1)
+        STREGM          %r25,WORD_LEN(%r1)
+        STREGM          %r24,WORD_LEN(%r1)
+        STREGM          %r23,WORD_LEN(%r1)
+        STREGM          %r22,WORD_LEN(%r1)
+        STREGM          %r21,WORD_LEN(%r1)
+        STREGM          %r20,WORD_LEN(%r1)
+        STREGM          %r19,WORD_LEN(%r1)
+
+$is_monarch_cpu_reboot:
 	/* Initialize stack pointer */
 	load32	BOOTADDR(parisc_stack),%r1
+	load_fw_upper32	%r1
 	ldo	FRAME_SIZE(%r1),%sp
 
 	/* Initialize the global data pointer */
@@ -181,24 +270,13 @@ $is_monarch_cpu:
 	load32	BOOTADDR(_ebss),%r4
 $bss_loop:
 	cmpb,<<,n %r3,%r4,$bss_loop
-	stw,ma	%r0,4(%r3)
-
-	/* Save boot args */
-        load32          BOOTADDR(boot_args),%r1
-        stw,ma          %r26,4(%r1)
-        stw,ma          %r25,4(%r1)
-        stw,ma          %r24,4(%r1)
-        stw,ma          %r23,4(%r1)
-        stw,ma          %r22,4(%r1)
-        stw,ma          %r21,4(%r1)
-        stw,ma          %r20,4(%r1)
-        stw,ma          %r19,4(%r1)
+	STREGM	%r0,WORD_LEN(%r3)
 
 	load32	BOOTADDR(start_parisc_firmware),%r3
+	load_fw_upper32 %r3
 	bv	0(%r3)
 	copy	%r0,%r2
 END(startup)
-
 
 /*******************************************************
   TOC handler
@@ -246,7 +324,8 @@ ENTRY(toc_asm_entry)
         /* save all general registers */
         .set loop,0
         .rept 32
-        STREGM  loop, WORD_LEN(PIM_PTR)
+        copy    loop,TEMP
+        STREGM  TEMP, WORD_LEN(PIM_PTR)
         .set loop,loop+1
         .endr
 
@@ -325,6 +404,10 @@ END(smp_ivt)
 	PDC and IODC entry
  *******************************************************/
 
+/* XXX: memory location in page0: vec_pad0[], temporary storage for PSW.W */
+#define PSW_OFFSET1	24
+#define PSW_OFFSET2	28
+
 ENTRY(pdc_entry)
 	stw %rp,-20(%sp)
 	stw %dp,-32(%sp)
@@ -332,6 +415,7 @@ ENTRY(pdc_entry)
 	stw %arg1,-40(%sp)
 	stw %arg2,-44(%sp)
 	stw %arg3,-48(%sp)
+	stw %r31,PSW_OFFSET1(%r0)	/* store PSW_W */
 	ldo -FRAME_SIZE(%sp),%arg0
 
 	loadgp
@@ -340,13 +424,22 @@ ENTRY(pdc_entry)
 
 	ldo -FRAME_SIZE(%sp),%sp
 	ldw -20(%sp),%rp
-	bv %r0(%rp)
 	ldw -32(%sp),%dp
+	ldw PSW_OFFSET1(%r0),%r31
+	load32 0x8000000,%r1	/* mask PSW_W */
+	and,= %r31,%r1,%r0
+	bv %r0(%rp)		/* return without setting PSW_W */
+	nop
+	bv %r0(%rp)		/* return with setting PSW_W */
+	.level 2.0
+	nop // ssm PSW_W_SM,%r0
+	.level LEVEL
 END(pdc_entry)
 
 /* pdc_entry_table will be copied into low memory. */
 ENTRY(pdc_entry_table)
 	load32 pdc_entry,%r1
+	clear_PSW_W
 	bv,n %r0(%r1)
 END(pdc_entry_table)
 
@@ -369,6 +462,8 @@ ENTRY(iodc_entry)
 	stw %arg1,-40(%sp)
 	stw %arg2,-44(%sp)
 	stw %arg3,-48(%sp)
+	clear_PSW_W
+	stw %r31,PSW_OFFSET2(%r0)	/* store PSW_W */
 	ldo -FRAME_SIZE(%sp),%arg0
 
 	loadgp
@@ -378,21 +473,19 @@ ENTRY(iodc_entry)
 .iodc_ret:
 	ldo -FRAME_SIZE(%sp),%sp
 	ldw -20(%sp),%rp
-	bv %r0(%rp)
 	ldw -32(%sp),%dp
-END(iodc_entry)
 
-	.data
-ENTRY(boot_args)
-        .word 0 /* r26: ramsize */
-        .word 0 /* r25: kernel entry point */
-        .word 0 /* r24: cmdline */
-        .word 0 /* r23: initrd_start */
-        .word 0 /* r22: initrd_end */
-        .word 0 /* r21: num CPUs */
-        .word 0 /* r20: pdc_debug */
-        .word 0 /* r19: fw_cfg port */
-END(boot_args)
+// .word 0xfffdead0
+	ldw PSW_OFFSET2(%r0),%r31
+	load32 0x8000000,%r1	/* mask PSW_W */
+	and,= %r31,%r1,%r0
+	bv %r0(%rp)		/* return without setting PSW_W */
+	nop
+	bv %r0(%rp)		/* return with setting PSW_W */
+	.level 2.0
+	nop // ssm PSW_W_SM,%r0
+	.level LEVEL
+END(iodc_entry)
 
 /****************************************************************
  * Rom Header for VGA / STI

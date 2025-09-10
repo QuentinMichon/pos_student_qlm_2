@@ -119,6 +119,7 @@ native:
 - libusb-dev
 - libvirt-dev
 - libvirt-glib-dev
+- libxdp-dev
 - libxml2-dev
 - libxml2-utils
 - libxslt
@@ -134,6 +135,7 @@ native:
 - make
 - mesa-dev
 - meson
+- mtools
 - multipath-tools
 - musl-dev
 - nano
@@ -176,11 +178,13 @@ native:
 - perl-yaml
 - php81-dev
 - php81-pecl-imagick
+- pipewire-dev
 - pixman-dev
 - pkgconf
 - polkit
 - pulseaudio-dev
 - py3-boto3
+- py3-build
 - py3-dbus
 - py3-docutils
 - py3-flake8
@@ -195,6 +199,7 @@ native:
 - py3-setuptools
 - py3-sphinx
 - py3-sphinx_rtd_theme
+- py3-tomli
 - py3-wheel
 - py3-yaml
 - python3
@@ -224,6 +229,7 @@ native:
 - spice-protocol
 - strace
 - sudo
+- swtpm
 - tar
 - tcl
 - tcpdump
@@ -244,6 +250,7 @@ native:
 - wireshark-dev
 - xen-dev
 - xfsprogs-dev
+- xorriso
 - xz
 - xz-dev
 - yajl-dev

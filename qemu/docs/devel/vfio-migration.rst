@@ -7,16 +7,37 @@ the guest is running on source host and restoring this saved state on the
 destination host. This document details how saving and restoring of VFIO
 devices is done in QEMU.
 
-Migration of VFIO devices currently consists of a single stop-and-copy phase.
-During the stop-and-copy phase the guest is stopped and the entire VFIO device
-data is transferred to the destination.
+Migration of VFIO devices consists of two phases: the optional pre-copy phase,
+and the stop-and-copy phase. The pre-copy phase is iterative and allows to
+accommodate VFIO devices that have a large amount of data that needs to be
+transferred. The iterative pre-copy phase of migration allows for the guest to
+continue whilst the VFIO device state is transferred to the destination, this
+helps to reduce the total downtime of the VM. VFIO devices opt-in to pre-copy
+support by reporting the VFIO_MIGRATION_PRE_COPY flag in the
+VFIO_DEVICE_FEATURE_MIGRATION ioctl.
 
-The pre-copy phase of migration is currently not supported for VFIO devices.
-Support for VFIO pre-copy will be added later on.
+When pre-copy is supported, it's possible to further reduce downtime by
+enabling "switchover-ack" migration capability.
+VFIO migration uAPI defines "initial bytes" as part of its pre-copy data stream
+and recommends that the initial bytes are sent and loaded in the destination
+before stopping the source VM. Enabling this migration capability will
+guarantee that and thus, can potentially reduce downtime even further.
 
-Note that currently VFIO migration is supported only for a single device. This
-is due to VFIO migration's lack of P2P support. However, P2P support is planned
-to be added later on.
+To support migration of multiple devices that might do P2P transactions between
+themselves, VFIO migration uAPI defines an intermediate P2P quiescent state.
+While in the P2P quiescent state, P2P DMA transactions cannot be initiated by
+the device, but the device can respond to incoming ones. Additionally, all
+outstanding P2P transactions are guaranteed to have been completed by the time
+the device enters this state.
+
+All the devices that support P2P migration are first transitioned to the P2P
+quiescent state and only then are they stopped or started. This makes migration
+safe P2P-wise, since starting and stopping the devices is not done atomically
+for all the devices together.
+
+Thus, multiple VFIO devices migration is allowed only if all the devices
+support P2P migration. Single VFIO device migration is allowed regardless of
+P2P migration support.
 
 A detailed description of the UAPI for VFIO device migration can be found in
 the comment for the ``vfio_device_mig_state`` structure in the header file
@@ -29,9 +50,22 @@ VFIO implements the device hooks for the iterative approach as follows:
 * A ``load_setup`` function that sets the VFIO device on the destination in
   _RESUMING state.
 
+* A ``state_pending_estimate`` function that reports an estimate of the
+  remaining pre-copy data that the vendor driver has yet to save for the VFIO
+  device.
+
 * A ``state_pending_exact`` function that reads pending_bytes from the vendor
   driver, which indicates the amount of data that the vendor driver has yet to
   save for the VFIO device.
+
+* An ``is_active_iterate`` function that indicates ``save_live_iterate`` is
+  active only when the VFIO device is in pre-copy states.
+
+* A ``save_live_iterate`` function that reads the VFIO device's data from the
+  vendor driver during iterative pre-copy phase.
+
+* A ``switchover_ack_needed`` function that checks if the VFIO device uses
+  "switchover-ack" migration capability when this capability is enabled.
 
 * A ``save_state`` function to save the device config space if it is present.
 
@@ -110,8 +144,11 @@ will be blocked.
 Flow of state changes during Live migration
 ===========================================
 
-Below is the flow of state change during live migration.
-The values in the brackets represent the VM state, the migration state, and
+Below is the state change flow during live migration for a VFIO device that
+supports both precopy and P2P migration. The flow for devices that don't
+support it is similar, except that the relevant states for precopy and P2P are
+skipped.
+The values in the parentheses represent the VM state, the migration state, and
 the VFIO device state, respectively.
 
 Live migration save path
@@ -119,42 +156,51 @@ Live migration save path
 
 ::
 
-                        QEMU normal running state
-                        (RUNNING, _NONE, _RUNNING)
-                                  |
+                           QEMU normal running state
+                           (RUNNING, _NONE, _RUNNING)
+                                      |
                      migrate_init spawns migration_thread
-                Migration thread then calls each device's .save_setup()
-                       (RUNNING, _SETUP, _RUNNING)
-                                  |
-                      (RUNNING, _ACTIVE, _RUNNING)
-             If device is active, get pending_bytes by .state_pending_exact()
-          If total pending_bytes >= threshold_size, call .save_live_iterate()
-        Iterate till total pending bytes converge and are less than threshold
-                                  |
-  On migration completion, vCPU stops and calls .save_live_complete_precopy for
-  each active device. The VFIO device is then transitioned into _STOP_COPY state
-                  (FINISH_MIGRATE, _DEVICE, _STOP_COPY)
-                                  |
-     For the VFIO device, iterate in .save_live_complete_precopy until
-                         pending data is 0
-                   (FINISH_MIGRATE, _DEVICE, _STOP)
-                                  |
-                 (FINISH_MIGRATE, _COMPLETED, _STOP)
-             Migraton thread schedules cleanup bottom half and exits
+            Migration thread then calls each device's .save_setup()
+                          (RUNNING, _SETUP, _PRE_COPY)
+                                      |
+                         (RUNNING, _ACTIVE, _PRE_COPY)
+  If device is active, get pending_bytes by .state_pending_{estimate,exact}()
+       If total pending_bytes >= threshold_size, call .save_live_iterate()
+                Data of VFIO device for pre-copy phase is copied
+      Iterate till total pending bytes converge and are less than threshold
+                                      |
+       On migration completion, the vCPUs and the VFIO device are stopped
+              The VFIO device is first put in P2P quiescent state
+                    (FINISH_MIGRATE, _ACTIVE, _PRE_COPY_P2P)
+                                      |
+                Then the VFIO device is put in _STOP_COPY state
+                     (FINISH_MIGRATE, _ACTIVE, _STOP_COPY)
+         .save_live_complete_precopy() is called for each active device
+      For the VFIO device, iterate in .save_live_complete_precopy() until
+                               pending data is 0
+                                      |
+                     (POSTMIGRATE, _COMPLETED, _STOP_COPY)
+            Migraton thread schedules cleanup bottom half and exits
+                                      |
+                           .save_cleanup() is called
+                        (POSTMIGRATE, _COMPLETED, _STOP)
 
 Live migration resume path
 --------------------------
 
 ::
 
-              Incoming migration calls .load_setup for each device
-                       (RESTORE_VM, _ACTIVE, _STOP)
-                                 |
-       For each device, .load_state is called for that device section data
-                       (RESTORE_VM, _ACTIVE, _RESUMING)
-                                 |
-    At the end, .load_cleanup is called for each device and vCPUs are started
-                       (RUNNING, _NONE, _RUNNING)
+             Incoming migration calls .load_setup() for each device
+                          (RESTORE_VM, _ACTIVE, _STOP)
+                                      |
+     For each device, .load_state() is called for that device section data
+                        (RESTORE_VM, _ACTIVE, _RESUMING)
+                                      |
+  At the end, .load_cleanup() is called for each device and vCPUs are started
+              The VFIO device is first put in P2P quiescent state
+                        (RUNNING, _ACTIVE, _RUNNING_P2P)
+                                      |
+                           (RUNNING, _NONE, _RUNNING)
 
 Postcopy
 ========

@@ -71,8 +71,8 @@ static bool do_ldst_quad(DisasContext *ctx, arg_D *a, bool store, bool prefixed)
 {
 #if defined(TARGET_PPC64)
     TCGv ea;
-    TCGv_i64 low_addr_gpr, high_addr_gpr;
-    MemOp mop;
+    TCGv_i64 lo, hi;
+    TCGv_i128 t16;
 
     REQUIRE_INSNS_FLAGS(ctx, 64BX);
 
@@ -94,58 +94,21 @@ static bool do_ldst_quad(DisasContext *ctx, arg_D *a, bool store, bool prefixed)
     gen_set_access_type(ctx, ACCESS_INT);
     ea = do_ea_calc(ctx, a->ra, tcg_constant_tl(a->si));
 
-    if (prefixed || !ctx->le_mode) {
-        low_addr_gpr = cpu_gpr[a->rt];
-        high_addr_gpr = cpu_gpr[a->rt + 1];
+    if (ctx->le_mode && prefixed) {
+        lo = cpu_gpr[a->rt];
+        hi = cpu_gpr[a->rt + 1];
     } else {
-        low_addr_gpr = cpu_gpr[a->rt + 1];
-        high_addr_gpr = cpu_gpr[a->rt];
+        lo = cpu_gpr[a->rt + 1];
+        hi = cpu_gpr[a->rt];
     }
+    t16 = tcg_temp_new_i128();
 
-    if (tb_cflags(ctx->base.tb) & CF_PARALLEL) {
-        if (HAVE_ATOMIC128) {
-            mop = DEF_MEMOP(MO_128);
-            TCGv_i32 oi = tcg_constant_i32(make_memop_idx(mop, ctx->mem_idx));
-            if (store) {
-                if (ctx->le_mode) {
-                    gen_helper_stq_le_parallel(cpu_env, ea, low_addr_gpr,
-                                               high_addr_gpr, oi);
-                } else {
-                    gen_helper_stq_be_parallel(cpu_env, ea, high_addr_gpr,
-                                               low_addr_gpr, oi);
-
-                }
-            } else {
-                if (ctx->le_mode) {
-                    gen_helper_lq_le_parallel(low_addr_gpr, cpu_env, ea, oi);
-                    tcg_gen_ld_i64(high_addr_gpr, cpu_env,
-                                   offsetof(CPUPPCState, retxh));
-                } else {
-                    gen_helper_lq_be_parallel(high_addr_gpr, cpu_env, ea, oi);
-                    tcg_gen_ld_i64(low_addr_gpr, cpu_env,
-                                   offsetof(CPUPPCState, retxh));
-                }
-            }
-        } else {
-            /* Restart with exclusive lock.  */
-            gen_helper_exit_atomic(cpu_env);
-            ctx->base.is_jmp = DISAS_NORETURN;
-        }
+    if (store) {
+        tcg_gen_concat_i64_i128(t16, lo, hi);
+        tcg_gen_qemu_st_i128(t16, ea, ctx->mem_idx, DEF_MEMOP(MO_128));
     } else {
-        mop = DEF_MEMOP(MO_UQ);
-        if (store) {
-            tcg_gen_qemu_st_i64(low_addr_gpr, ea, ctx->mem_idx, mop);
-        } else {
-            tcg_gen_qemu_ld_i64(low_addr_gpr, ea, ctx->mem_idx, mop);
-        }
-
-        gen_addr_add(ctx, ea, ea, 8);
-
-        if (store) {
-            tcg_gen_qemu_st_i64(high_addr_gpr, ea, ctx->mem_idx, mop);
-        } else {
-            tcg_gen_qemu_ld_i64(high_addr_gpr, ea, ctx->mem_idx, mop);
-        }
+        tcg_gen_qemu_ld_i128(t16, ea, ctx->mem_idx, DEF_MEMOP(MO_128));
+        tcg_gen_extr_i128_i64(lo, hi, t16);
     }
 #else
     qemu_build_not_reached();
@@ -379,12 +342,14 @@ static bool do_set_bool_cond(DisasContext *ctx, arg_X_bi *a, bool neg, bool rev)
     uint32_t mask = 0x08 >> (a->bi & 0x03);
     TCGCond cond = rev ? TCG_COND_EQ : TCG_COND_NE;
     TCGv temp = tcg_temp_new();
+    TCGv zero = tcg_constant_tl(0);
 
     tcg_gen_extu_i32_tl(temp, cpu_crf[a->bi >> 2]);
     tcg_gen_andi_tl(temp, temp, mask);
-    tcg_gen_setcondi_tl(cond, cpu_gpr[a->rt], temp, 0);
     if (neg) {
-        tcg_gen_neg_tl(cpu_gpr[a->rt], cpu_gpr[a->rt]);
+        tcg_gen_negsetcond_tl(cond, cpu_gpr[a->rt], temp, zero);
+    } else {
+        tcg_gen_setcond_tl(cond, cpu_gpr[a->rt], temp, zero);
     }
     return true;
 }
@@ -552,7 +517,7 @@ static bool do_hash(DisasContext *ctx, arg_X *a, bool priv,
     }
 
     ea = do_ea_calc(ctx, a->ra, tcg_constant_tl(a->rt));
-    helper(cpu_env, ea, cpu_gpr[a->ra], cpu_gpr[a->rb]);
+    helper(tcg_env, ea, cpu_gpr[a->ra], cpu_gpr[a->rb]);
     return true;
 }
 

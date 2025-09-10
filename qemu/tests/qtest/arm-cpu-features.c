@@ -417,12 +417,22 @@ static void pauth_tests_default(QTestState *qts, const char *cpu_type)
 {
     assert_has_feature_enabled(qts, cpu_type, "pauth");
     assert_has_feature_disabled(qts, cpu_type, "pauth-impdef");
+    assert_has_feature_disabled(qts, cpu_type, "pauth-qarma3");
     assert_set_feature(qts, cpu_type, "pauth", false);
     assert_set_feature(qts, cpu_type, "pauth", true);
     assert_set_feature(qts, cpu_type, "pauth-impdef", true);
     assert_set_feature(qts, cpu_type, "pauth-impdef", false);
-    assert_error(qts, cpu_type, "cannot enable pauth-impdef without pauth",
+    assert_set_feature(qts, cpu_type, "pauth-qarma3", true);
+    assert_set_feature(qts, cpu_type, "pauth-qarma3", false);
+    assert_error(qts, cpu_type,
+                 "cannot enable pauth-impdef or pauth-qarma3 without pauth",
                  "{ 'pauth': false, 'pauth-impdef': true }");
+    assert_error(qts, cpu_type,
+                 "cannot enable pauth-impdef or pauth-qarma3 without pauth",
+                 "{ 'pauth': false, 'pauth-qarma3': true }");
+    assert_error(qts, cpu_type,
+                 "cannot enable both pauth-impdef and pauth-qarma3",
+                 "{ 'pauth': true, 'pauth-impdef': true, 'pauth-qarma3': true }");
 }
 
 static void test_query_cpu_model_expansion(const void *data)
@@ -506,9 +516,23 @@ static void test_query_cpu_model_expansion_kvm(const void *data)
         QDict *resp;
         char *error;
 
-        assert_error(qts, "cortex-a15",
-            "We cannot guarantee the CPU type 'cortex-a15' works "
-            "with KVM on this host", NULL);
+        /*
+         * When using KVM, only the 'host' and 'max' CPU models are
+         * supported. Test that we're emitting a suitable error for
+         * unsupported CPU models.
+         */
+        if (qtest_has_accel("tcg")) {
+            assert_error(qts, "cortex-a7",
+                         "We cannot guarantee the CPU type 'cortex-a7' works "
+                         "with KVM on this host", NULL);
+        } else {
+            /*
+             * With a KVM-only build the 32-bit CPUs are not present.
+             */
+            assert_error(qts, "cortex-a7",
+                         "The CPU type 'cortex-a7' is not a "
+                         "recognized ARM CPU type", NULL);
+        }
 
         assert_has_feature_enabled(qts, "host", "aarch64");
 

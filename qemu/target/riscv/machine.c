@@ -79,8 +79,8 @@ static bool hyper_needed(void *opaque)
 
 static const VMStateDescription vmstate_hyper = {
     .name = "cpu/hyper",
-    .version_id = 2,
-    .minimum_version_id = 2,
+    .version_id = 3,
+    .minimum_version_id = 3,
     .needed = hyper_needed,
     .fields = (VMStateField[]) {
         VMSTATE_UINTTL(env.hstatus, RISCVCPU),
@@ -92,6 +92,8 @@ static const VMStateDescription vmstate_hyper = {
         VMSTATE_UINTTL(env.hgatp, RISCVCPU),
         VMSTATE_UINTTL(env.hgeie, RISCVCPU),
         VMSTATE_UINTTL(env.hgeip, RISCVCPU),
+        VMSTATE_UINT64(env.hvien, RISCVCPU),
+        VMSTATE_UINT64(env.hvip, RISCVCPU),
         VMSTATE_UINT64(env.htimedelta, RISCVCPU),
         VMSTATE_UINT64(env.vstimecmp, RISCVCPU),
 
@@ -106,6 +108,7 @@ static const VMStateDescription vmstate_hyper = {
         VMSTATE_UINTTL(env.vstval, RISCVCPU),
         VMSTATE_UINTTL(env.vsatp, RISCVCPU),
         VMSTATE_UINTTL(env.vsiselect, RISCVCPU),
+        VMSTATE_UINT64(env.vsie, RISCVCPU),
 
         VMSTATE_UINTTL(env.mtval2, RISCVCPU),
         VMSTATE_UINTTL(env.mtinst, RISCVCPU),
@@ -136,15 +139,15 @@ static const VMStateDescription vmstate_vector = {
     .minimum_version_id = 2,
     .needed = vector_needed,
     .fields = (VMStateField[]) {
-            VMSTATE_UINT64_ARRAY(env.vreg, RISCVCPU, 32 * RV_VLEN_MAX / 64),
-            VMSTATE_UINTTL(env.vxrm, RISCVCPU),
-            VMSTATE_UINTTL(env.vxsat, RISCVCPU),
-            VMSTATE_UINTTL(env.vl, RISCVCPU),
-            VMSTATE_UINTTL(env.vstart, RISCVCPU),
-            VMSTATE_UINTTL(env.vtype, RISCVCPU),
-            VMSTATE_BOOL(env.vill, RISCVCPU),
-            VMSTATE_END_OF_LIST()
-        }
+        VMSTATE_UINT64_ARRAY(env.vreg, RISCVCPU, 32 * RV_VLEN_MAX / 64),
+        VMSTATE_UINTTL(env.vxrm, RISCVCPU),
+        VMSTATE_UINTTL(env.vxsat, RISCVCPU),
+        VMSTATE_UINTTL(env.vl, RISCVCPU),
+        VMSTATE_UINTTL(env.vstart, RISCVCPU),
+        VMSTATE_UINTTL(env.vtype, RISCVCPU),
+        VMSTATE_BOOL(env.vill, RISCVCPU),
+        VMSTATE_END_OF_LIST()
+    }
 };
 
 static bool pointermasking_needed(void *opaque)
@@ -194,12 +197,13 @@ static const VMStateDescription vmstate_rv128 = {
     }
 };
 
+#ifdef CONFIG_KVM
 static bool kvmtimer_needed(void *opaque)
 {
     return kvm_enabled();
 }
 
-static int cpu_post_load(void *opaque, int version_id)
+static int cpu_kvmtimer_post_load(void *opaque, int version_id)
 {
     RISCVCPU *cpu = opaque;
     CPURISCVState *env = &cpu->env;
@@ -213,7 +217,7 @@ static const VMStateDescription vmstate_kvmtimer = {
     .version_id = 1,
     .minimum_version_id = 1,
     .needed = kvmtimer_needed,
-    .post_load = cpu_post_load,
+    .post_load = cpu_kvmtimer_post_load,
     .fields = (VMStateField[]) {
         VMSTATE_UINT64(env.kvm_timer_time, RISCVCPU),
         VMSTATE_UINT64(env.kvm_timer_compare, RISCVCPU),
@@ -221,6 +225,7 @@ static const VMStateDescription vmstate_kvmtimer = {
         VMSTATE_END_OF_LIST()
     }
 };
+#endif
 
 static bool debug_needed(void *opaque)
 {
@@ -311,7 +316,7 @@ static bool pmu_needed(void *opaque)
 {
     RISCVCPU *cpu = opaque;
 
-    return cpu->cfg.pmu_num;
+    return (cpu->cfg.pmu_mask > 0);
 }
 
 static const VMStateDescription vmstate_pmu_ctr_state = {
@@ -329,10 +334,28 @@ static const VMStateDescription vmstate_pmu_ctr_state = {
     }
 };
 
+static bool jvt_needed(void *opaque)
+{
+    RISCVCPU *cpu = opaque;
+
+    return cpu->cfg.ext_zcmt;
+}
+
+static const VMStateDescription vmstate_jvt = {
+    .name = "cpu/jvt",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .needed = jvt_needed,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINTTL(env.jvt, RISCVCPU),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 const VMStateDescription vmstate_riscv_cpu = {
     .name = "cpu",
-    .version_id = 7,
-    .minimum_version_id = 7,
+    .version_id = 9,
+    .minimum_version_id = 9,
     .post_load = riscv_cpu_post_load,
     .fields = (VMStateField[]) {
         VMSTATE_UINTTL_ARRAY(env.gpr, RISCVCPU, 32),
@@ -352,13 +375,16 @@ const VMStateDescription vmstate_riscv_cpu = {
         VMSTATE_UINT32(env.misa_mxl_max, RISCVCPU),
         VMSTATE_UINT32(env.misa_ext_mask, RISCVCPU),
         VMSTATE_UINTTL(env.priv, RISCVCPU),
-        VMSTATE_UINTTL(env.virt, RISCVCPU),
+        VMSTATE_BOOL(env.virt_enabled, RISCVCPU),
         VMSTATE_UINT64(env.resetvec, RISCVCPU),
         VMSTATE_UINTTL(env.mhartid, RISCVCPU),
         VMSTATE_UINT64(env.mstatus, RISCVCPU),
         VMSTATE_UINT64(env.mip, RISCVCPU),
         VMSTATE_UINT64(env.miclaim, RISCVCPU),
         VMSTATE_UINT64(env.mie, RISCVCPU),
+        VMSTATE_UINT64(env.mvien, RISCVCPU),
+        VMSTATE_UINT64(env.mvip, RISCVCPU),
+        VMSTATE_UINT64(env.sie, RISCVCPU),
         VMSTATE_UINT64(env.mideleg, RISCVCPU),
         VMSTATE_UINTTL(env.satp, RISCVCPU),
         VMSTATE_UINTTL(env.stval, RISCVCPU),
@@ -391,10 +417,13 @@ const VMStateDescription vmstate_riscv_cpu = {
         &vmstate_vector,
         &vmstate_pointermasking,
         &vmstate_rv128,
+#ifdef CONFIG_KVM
         &vmstate_kvmtimer,
+#endif
         &vmstate_envcfg,
         &vmstate_debug,
         &vmstate_smstateen,
+        &vmstate_jvt,
         NULL
     }
 };

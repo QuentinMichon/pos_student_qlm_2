@@ -24,6 +24,7 @@ enum {
     GDB_SIGNAL_TRAP = 5,
     GDB_SIGNAL_ABRT = 6,
     GDB_SIGNAL_ALRM = 14,
+    GDB_SIGNAL_STOP = 17,
     GDB_SIGNAL_IO = 23,
     GDB_SIGNAL_XCPU = 24,
     GDB_SIGNAL_UNKNOWN = 143
@@ -32,8 +33,7 @@ enum {
 typedef struct GDBProcess {
     uint32_t pid;
     bool attached;
-
-    char target_xml[1024];
+    char *target_xml;
 } GDBProcess;
 
 enum RSState {
@@ -65,6 +65,11 @@ typedef struct GDBState {
     GByteArray *mem_buf;
     int sstep_flags;
     int supported_sstep_flags;
+    /*
+     * Whether we are allowed to send a stop reply packet at this moment.
+     * Must be set off after sending the stop reply itself.
+     */
+    bool allow_stop_reply;
 } GDBState;
 
 /* lives in main gdbstub.c */
@@ -97,7 +102,7 @@ static inline int tohex(int v)
 }
 
 /*
- * Connection helpers for both softmmu and user backends
+ * Connection helpers for both system and user backends
  */
 
 void gdb_put_strbuf(void);
@@ -124,6 +129,8 @@ void gdb_read_byte(uint8_t ch);
  */
 bool gdb_got_immediate_ack(void);
 /* utility helpers */
+GDBProcess *gdb_get_process(uint32_t pid);
+CPUState *gdb_get_first_cpu_in_process(GDBProcess *process);
 CPUState *gdb_first_attached_cpu(void);
 void gdb_append_thread_id(CPUState *cpu, GString *buf);
 int gdb_get_cpu_index(CPUState *cpu);
@@ -182,6 +189,11 @@ typedef union GdbCmdVariant {
 void gdb_handle_query_rcmd(GArray *params, void *user_ctx); /* softmmu */
 void gdb_handle_query_offsets(GArray *params, void *user_ctx); /* user */
 void gdb_handle_query_xfer_auxv(GArray *params, void *user_ctx); /*user */
+void gdb_handle_v_file_open(GArray *params, void *user_ctx); /* user */
+void gdb_handle_v_file_close(GArray *params, void *user_ctx); /* user */
+void gdb_handle_v_file_pread(GArray *params, void *user_ctx); /* user */
+void gdb_handle_v_file_readlink(GArray *params, void *user_ctx); /* user */
+void gdb_handle_query_xfer_exec_file(GArray *params, void *user_ctx); /* user */
 
 void gdb_handle_query_attached(GArray *params, void *user_ctx); /* both */
 
@@ -216,7 +228,7 @@ void gdb_breakpoint_remove_all(CPUState *cs);
  * @is_write: is it a write operation
  *
  * This function is specialised depending on the mode we are running
- * in. For softmmu guests we can switch the interpretation of the
+ * in. For system guests we can switch the interpretation of the
  * address to a physical address.
  */
 int gdb_target_memory_rw_debug(CPUState *cs, hwaddr addr,

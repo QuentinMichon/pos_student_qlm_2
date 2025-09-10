@@ -65,6 +65,9 @@ static int block_crypto_read_func(QCryptoBlock *block,
     BlockDriverState *bs = opaque;
     ssize_t ret;
 
+    GLOBAL_STATE_CODE();
+    GRAPH_RDLOCK_GUARD_MAINLOOP();
+
     ret = bdrv_pread(bs->file, offset, buflen, buf, 0);
     if (ret < 0) {
         error_setg_errno(errp, -ret, "Could not read encryption header");
@@ -83,6 +86,9 @@ static int block_crypto_write_func(QCryptoBlock *block,
     BlockDriverState *bs = opaque;
     ssize_t ret;
 
+    GLOBAL_STATE_CODE();
+    GRAPH_RDLOCK_GUARD_MAINLOOP();
+
     ret = bdrv_pwrite(bs->file, offset, buflen, buf, 0);
     if (ret < 0) {
         error_setg_errno(errp, -ret, "Could not write encryption header");
@@ -99,12 +105,10 @@ struct BlockCryptoCreateData {
 };
 
 
-static int block_crypto_create_write_func(QCryptoBlock *block,
-                                          size_t offset,
-                                          const uint8_t *buf,
-                                          size_t buflen,
-                                          void *opaque,
-                                          Error **errp)
+static int coroutine_fn GRAPH_UNLOCKED
+block_crypto_create_write_func(QCryptoBlock *block, size_t offset,
+                               const uint8_t *buf, size_t buflen, void *opaque,
+                               Error **errp)
 {
     struct BlockCryptoCreateData *data = opaque;
     ssize_t ret;
@@ -117,10 +121,9 @@ static int block_crypto_create_write_func(QCryptoBlock *block,
     return 0;
 }
 
-static int block_crypto_create_init_func(QCryptoBlock *block,
-                                         size_t headerlen,
-                                         void *opaque,
-                                         Error **errp)
+static int coroutine_fn GRAPH_UNLOCKED
+block_crypto_create_init_func(QCryptoBlock *block, size_t headerlen,
+                              void *opaque, Error **errp)
 {
     struct BlockCryptoCreateData *data = opaque;
     Error *local_error = NULL;
@@ -266,10 +269,14 @@ static int block_crypto_open_generic(QCryptoBlockFormat format,
     unsigned int cflags = 0;
     QDict *cryptoopts = NULL;
 
+    GLOBAL_STATE_CODE();
+
     ret = bdrv_open_file_child(NULL, options, "file", bs, errp);
     if (ret < 0) {
         return ret;
     }
+
+    GRAPH_RDLOCK_GUARD_MAINLOOP();
 
     bs->supported_write_flags = BDRV_REQ_FUA &
         bs->file->bs->supported_write_flags;
@@ -314,7 +321,7 @@ static int block_crypto_open_generic(QCryptoBlockFormat format,
 }
 
 
-static int coroutine_fn
+static int coroutine_fn GRAPH_UNLOCKED
 block_crypto_co_create_generic(BlockDriverState *bs, int64_t size,
                                QCryptoBlockCreateOptions *opts,
                                PreallocMode prealloc, Error **errp)
@@ -355,7 +362,7 @@ block_crypto_co_create_generic(BlockDriverState *bs, int64_t size,
     ret = 0;
  cleanup:
     qcrypto_block_free(crypto);
-    blk_unref(blk);
+    blk_co_unref(blk);
     return ret;
 }
 
@@ -627,7 +634,7 @@ static int block_crypto_open_luks(BlockDriverState *bs,
                                      bs, options, flags, errp);
 }
 
-static int coroutine_fn
+static int coroutine_fn GRAPH_UNLOCKED
 block_crypto_co_create_luks(BlockdevCreateOptions *create_options, Error **errp)
 {
     BlockdevCreateOptionsLUKS *luks_opts;
@@ -661,11 +668,11 @@ block_crypto_co_create_luks(BlockdevCreateOptions *create_options, Error **errp)
 
     ret = 0;
 fail:
-    bdrv_unref(bs);
+    bdrv_co_unref(bs);
     return ret;
 }
 
-static int coroutine_fn GRAPH_RDLOCK
+static int coroutine_fn GRAPH_UNLOCKED
 block_crypto_co_create_opts_luks(BlockDriver *drv, const char *filename,
                                  QemuOpts *opts, Error **errp)
 {
@@ -727,16 +734,18 @@ fail:
      * beforehand, it has been truncated and corrupted in the process.
      */
     if (ret) {
+        bdrv_graph_co_rdlock();
         bdrv_co_delete_file_noerr(bs);
+        bdrv_graph_co_rdunlock();
     }
 
-    bdrv_unref(bs);
+    bdrv_co_unref(bs);
     qapi_free_QCryptoBlockCreateOptions(create_opts);
     qobject_unref(cryptoopts);
     return ret;
 }
 
-static int coroutine_fn
+static int coroutine_fn GRAPH_RDLOCK
 block_crypto_co_get_info_luks(BlockDriverState *bs, BlockDriverInfo *bdi)
 {
     BlockDriverInfo subbdi;
@@ -778,7 +787,7 @@ block_crypto_get_specific_info_luks(BlockDriverState *bs, Error **errp)
     return spec_info;
 }
 
-static int
+static int GRAPH_RDLOCK
 block_crypto_amend_prepare(BlockDriverState *bs, Error **errp)
 {
     BlockCrypto *crypto = bs->opaque;
@@ -794,7 +803,7 @@ block_crypto_amend_prepare(BlockDriverState *bs, Error **errp)
     return ret;
 }
 
-static void
+static void GRAPH_RDLOCK
 block_crypto_amend_cleanup(BlockDriverState *bs)
 {
     BlockCrypto *crypto = bs->opaque;
@@ -829,7 +838,7 @@ block_crypto_amend_options_generic_luks(BlockDriverState *bs,
                                        errp);
 }
 
-static int
+static int GRAPH_RDLOCK
 block_crypto_amend_options_luks(BlockDriverState *bs,
                                 QemuOpts *opts,
                                 BlockDriverAmendStatusCB *status_cb,
