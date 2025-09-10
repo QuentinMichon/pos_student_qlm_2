@@ -22,7 +22,7 @@ done < <(cat build.conf; echo)
 
 if [ "$PLATFORM" == "virt64" ]; then
     echo Starting on ARM64
-    sudo qemu-system-aarch64 $@ ${USR_OPTION} \
+    sudo qemu/build/aarch64-softmmu/qemu-system-aarch64 $@ ${USR_OPTION} \
         -smp 4  \
         -serial mon:stdio  \
         -M virt -cpu cortex-a72  \

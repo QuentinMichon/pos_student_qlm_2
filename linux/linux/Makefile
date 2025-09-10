@@ -387,7 +387,7 @@ CROSS_COMPILE	?= arm-linux-gnueabihf-
 else ifeq ($(PLATFORM),$(filter $(PLATFORM),virt64 rpi4_64 zcu106))
 
 ARCH            ?= arm64
-CROSS_COMPILE	?= aarch64-linux-gnu-
+CROSS_COMPILE	?= aarch64-none-linux-gnu-
 
 endif
 
