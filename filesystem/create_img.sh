@@ -50,8 +50,8 @@ if [[ "$devname" = *[0-9] ]]; then
     export devname="${devname}p"
 fi
 
-sudo mkfs.fat -F32 -v /dev/"$devname"1
-sudo mkfs.ext4 /dev/"$devname"2
+sudo mkfs.fat -n POS-BOOT -F32 -v /dev/"$devname"1
+sudo mkfs.ext4 -L POS-ROOTFS /dev/"$devname"2
 
 if [ "$1" == "virt32" -o "$1" == "virt64" ]; then
     sudo losetup --detach $disk_loop
