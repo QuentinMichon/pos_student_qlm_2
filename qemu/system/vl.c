@@ -220,6 +220,14 @@ static const struct {
     { .driver = "virtio-vga-rutabaga",  .flag = &default_vga       },
 };
 
+static QemuOptsList qemu_sense_url_opts = {
+    .name = "sense-url",
+    .implied_opt_name = "sense-url",
+    .head = QTAILQ_HEAD_INITIALIZER(qemu_sense_url_opts.head),
+    .merge_lists = true,
+    .desc = { { /* end of list */ } },
+};
+
 static QemuOptsList qemu_rtc_opts = {
     .name = "rtc",
     .head = QTAILQ_HEAD_INITIALIZER(qemu_rtc_opts.head),
@@ -2745,6 +2753,7 @@ void qemu_init(int argc, char **argv)
     bool userconfig = true;
     FILE *vmstate_dump_file = NULL;
 
+    qemu_add_opts(&qemu_sense_url_opts);
     qemu_add_opts(&qemu_drive_opts);
     qemu_add_drive_opts(&qemu_legacy_drive_opts);
     qemu_add_drive_opts(&qemu_common_drive_opts);
@@ -2826,6 +2835,13 @@ void qemu_init(int argc, char **argv)
                 exit(1);
             }
             switch(popt->index) {
+            case QEMU_OPTION_sense_url:
+                opts = qemu_opts_parse_noisily(qemu_find_opts("sense-url"),
+                                               optarg, true);
+                if (opts == NULL) {
+                    exit(1);
+                }
+                break;
             case QEMU_OPTION_cpu:
                 /* hw initialization will check this */
                 cpu_option = optarg;

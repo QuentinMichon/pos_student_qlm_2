@@ -8,6 +8,14 @@ HXCOMM HXCOMM can be used for comments, discarded from both rST and C.
 
 DEFHEADING(Standard options:)
 
+DEF("sense-url", HAS_ARG, QEMU_OPTION_sense_url, \
+    "-sense-url url  access sense-hat emulator on given url\n",
+    QEMU_ARCH_ALL)
+SRST
+``-sense-url url``
+   access sense-hat emulator on given url
+ERST
+
 DEF("help", 0, QEMU_OPTION_h,
     "-h or -help     display this help and exit\n", QEMU_ARCH_ALL)
 SRST

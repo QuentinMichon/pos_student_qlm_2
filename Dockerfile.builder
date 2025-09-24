@@ -48,7 +48,7 @@ RUN apt-get update && apt-get install -y sudo python3 git file wget xz-utils pyt
 	bridge-utils iptables dnsmasq libssl-dev \
 	util-linux e2fsprogs vim nano libncurses-dev \
 	iputils-ping libpixman-1-dev libxcb-xkb-dev \
-	meson lsof \
+	meson lsof picocom ninja-build \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Make sudo usable without password

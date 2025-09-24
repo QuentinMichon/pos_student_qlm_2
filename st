@@ -33,7 +33,8 @@ if [ "$PLATFORM" == "virt64" ]; then
         -nographic \
         -netdev tap,id=n1,script=scripts/qemu-ifup.sh,downscript=scripts/qemu-ifdown.sh \
         -device virtio-net-device,netdev=n1,mac=${QEMU_MAC_ADDR} \
-        -gdb tcp::${GDB_PORT}
+        -gdb tcp::${GDB_PORT} \
+        -sense-url 172.17.0.1:4442
 
 else
     echo Starting on ARM32
@@ -47,5 +48,6 @@ else
         -kernel u-boot/build/virt32/u-boot \
         -net tap,script=scripts/qemu-ifup.sh,downscript=scripts/qemu-ifdown.sh -net nic,macaddr=${QEMU_MAC_ADDR} \
         -nographic \
-        -gdb tcp::${GDB_PORT}
+        -gdb tcp::${GDB_PORT} \
+        -sense-url 172.17.0.1:4442
 fi

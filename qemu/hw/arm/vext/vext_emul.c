@@ -18,6 +18,8 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu/option.h"
+#include "qemu/config-file.h"
 #include <stddef.h>
 #include <errno.h>
 
@@ -94,8 +96,14 @@ void *vext_cmd_post(cJSON *packet) {
 }
 
 static void vext_try_connect(void) {
-	char host[255];
-	snprintf(host, 255, "%s:%d", TCP_HOSTNAME, TCP_PORT);
+	const char *host;
+	host = qemu_opt_get(qemu_find_opts_singleton("sense-url"), "sense-url");
+
+	if (host == NULL) {
+		printf("No host for Sense-Hat\n");
+		vext_state.thread_terminate = 1;
+		return;
+	}
 
 	qemu_mutex_lock(&vext_state.connect_mutex);
 
@@ -105,7 +113,8 @@ static void vext_try_connect(void) {
 		return;
 	}
 
-	printf("%s: trying to connect to Sense-HAT server...\n", __func__);
+	printf("%s: trying to connect to Sense-HAT server at %s...\n", __func__,
+	       host);
 	while (vext_state.sock < 0 && !vext_state.thread_terminate) {
 		/* Try to connect */
 		vext_state.sock = inet_connect(host, NULL);
