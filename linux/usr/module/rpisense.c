@@ -8,41 +8,34 @@
 #include <linux/delay.h>
 #include <linux/kthread.h>
 
-#include <linux/mfd/rpisense/core.h>
-
 #include <linux/platform_device.h>
 
 #include "rpisense.h"
 
-static struct rpisense *rpisense;
+#define LED_ADDR 0x46
+#define JOYSTICK_SUB_ADDR 0xF2
 
-/* 8 (row) * 8 (column) * 3 (colors) + 1 (first byte needed blank) */
-#define SIZE_FB 193
+#define MR(row, col) (((row) * NB_ROW_COL * 3) + (col) + 1)
+#define MG(row, col) (((row) * NB_ROW_COL * 3) + (col) + 8 + 1)
+#define MB(row, col) (((row) * NB_ROW_COL * 3) + (col) + 16 + 1)
 
+#define MEM_R(mem, row, col) (((mem)[(row * 8) + col] >> 11) & 0x1f)
+#define MEM_G(mem, row, col) (((mem)[(row * 8) + col] >> 6) & 0x1f)
+#define MEM_B(mem, row, col) (((mem)[(row * 8) + col]) & 0x1f)
 
-#define LED_ADDR	0x46
-
-#define JOYSTICK_SUB_ADDR	0xF2
-
-static joystick_handler_t __joystick_handler;
-static struct platform_device *__pdev;
-
-uint8_t leds_array[SIZE_FB];
-
-unsigned char matrix[SIZE_FB];
-
-extern struct rpisense *rpisense_get_dev(void);
+#define NB_ROW_COL 8
 
 /* 5-bit per colour */
-#define RED	{ 0x00, 0xf8 }
-#define GREEN	{ 0xe0, 0x07 }
-#define BLUE	{ 0x1f, 0x00 }
-#define GRAY    { 0xef, 0x3d }
+#define RED 0xf800
+#define GREEN 0x07e0
+#define BLUE 0x001f
+#define GRAY 0x3def
 
-#define WHITE	{ 0xff, 0xff }
-#define BLACK	{ 0x00, 0x00 }
+#define WHITE 0xffff
+#define BLACK 0x0000
 
-unsigned char ledsoff[][2] = {
+/* clang-format off */
+static const u16 LEDS_OFF[NB_ROW_COL * NB_ROW_COL] = {
 	BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 	BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 	BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
@@ -53,13 +46,13 @@ unsigned char ledsoff[][2] = {
 	BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 };
 
-unsigned char leds[][64][2] = {
+static const u16 LEDS[][NB_ROW_COL * NB_ROW_COL] = {
 	{
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
-		BLACK, BLACK, BLACK, BLUE, BLUE, BLACK, BLACK, BLACK,
-		BLACK, BLACK, BLACK, BLUE, BLUE, BLACK, BLACK, BLACK,
+		BLACK, BLACK, BLACK, BLUE,  BLUE,  BLACK, BLACK, BLACK,
+		BLACK, BLACK, BLACK, BLUE,  BLUE,  BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
@@ -88,8 +81,8 @@ unsigned char leds[][64][2] = {
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
-		BLACK, BLACK, BLACK, BLACK, BLACK, GRAY, GRAY, BLACK,
-		BLACK, BLACK, BLACK, BLACK, BLACK, GRAY, GRAY, BLACK,
+		BLACK, BLACK, BLACK, BLACK, BLACK, GRAY,  GRAY,  BLACK,
+		BLACK, BLACK, BLACK, BLACK, BLACK, GRAY,  GRAY,  BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
@@ -100,34 +93,65 @@ unsigned char leds[][64][2] = {
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
-		BLACK, BLACK, BLACK, RED, RED, BLACK, BLACK, BLACK,
-		BLACK, BLACK, BLACK, RED, RED, BLACK, BLACK, BLACK,
+		BLACK, BLACK, BLACK, RED,   RED,   BLACK, BLACK, BLACK,
+		BLACK, BLACK, BLACK, RED,   RED,   BLACK, BLACK, BLACK,
 		BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK, BLACK,
 	}
 };
+/* clang-format on */
 
-void display_led(int led_nr, bool on) {
-	int i, j;
-	u16 *mem = (u16 *) leds[led_nr];
+/*
+ * Polling the joystick event
+ */
+static int joystick_poll(void *args)
+{
+	int ret = 0;
+	int prev_key = 0;
+	struct rpisense_data *priv = args;
+	struct rpisense *rpisense = priv->rpisense;
 
-	switch (on) {
-	case true:
-		for (j = 0; j < 8; j++) {
-			for (i = 0; i < 8; i++) {
-				matrix[(j * 24) + i + 1] |= (mem[(j * 8) + i] >> 11) & 0x1F;
-				matrix[(j * 24) + (i + 8) + 1] |= (mem[(j * 8) + i] >> 6) & 0x1F;
-				matrix[(j * 24) + (i + 16) + 1] |= mem[(j * 8) + i] & 0x1F;
-			}
+	while (!kthread_should_stop()) {
+		ret = i2c_smbus_read_byte_data(rpisense->i2c_client,
+					       JOYSTICK_SUB_ADDR);
+
+		if (prev_key != ret) {
+			if (priv->joystick_handler && priv->pdev)
+				priv->joystick_handler(priv->pdev, ret);
+			prev_key = ret;
 		}
-		break;
+		msleep(50);
+	}
 
+	return 0;
+}
 
-	case false:
-		for (j = 0; j < 8; j++) {
-			for (i = 0; i < 8; i++) {
-				matrix[(j * 24) + i + 1] &= ~((mem[(j * 8) + i] >> 11) & 0x1F);
-				matrix[(j * 24) + (i + 8) + 1] &= ~((mem[(j * 8) + i] >> 6) & 0x1F);
-				matrix[(j * 24) + (i + 16) + 1] &= ~(mem[(j * 8) + i] & 0x1F);
+int rpisense_joystick_handler_register(struct rpisense_data *sense_data,
+				       struct platform_device *pdev,
+				       joystick_handler_t joystick_handler)
+{
+	sense_data->joystick_handler = joystick_handler;
+	sense_data->pdev = pdev;
+
+	return 0;
+}
+
+void rpisense_display_led(struct rpisense_data *sense_data, int led_nr, bool on)
+{
+	int i, j;
+	const u16 *mem = LEDS[led_nr];
+	unsigned char *matrix = sense_data->matrix;
+	struct rpisense *rpisense = sense_data->rpisense;
+
+	for (j = 0; j < NB_ROW_COL; j++) {
+		for (i = 0; i < NB_ROW_COL; i++) {
+			if (on) {
+				matrix[MR(j, i)] |= MEM_R(mem, j, i);
+				matrix[MG(j, i)] |= MEM_G(mem, j, i);
+				matrix[MB(j, i)] |= MEM_B(mem, j, i);
+			} else {
+				matrix[MR(j, i)] &= ~MEM_R(mem, j, i);
+				matrix[MG(j, i)] &= ~MEM_G(mem, j, i);
+				matrix[MB(j, i)] &= ~MEM_B(mem, j, i);
 			}
 		}
 	}
@@ -135,42 +159,25 @@ void display_led(int led_nr, bool on) {
 	i2c_master_send(rpisense->i2c_client, matrix, SIZE_FB);
 }
 
-/*
- * Polling the joystick event
- */
+int rpisense_init(struct rpisense_data *sense_data)
+{
+	memset(sense_data, 0, sizeof(struct rpisense_data));
+	sense_data->rpisense = rpisense_get_dev();
+	sense_data->joystick_thread = NULL;
 
-int joystick_poll(void *args) {
-	int ret = 0;
-	int prev_key = 0;
+	sense_data->joystick_thread =
+		kthread_run(joystick_poll, sense_data, "rpisense-joystick_fn");
 
-
-	while (1) {
-		ret = i2c_smbus_read_byte_data(rpisense->i2c_client, JOYSTICK_SUB_ADDR);
-		msleep(50);
-
-		if (prev_key != ret) {
-			if (__joystick_handler && __pdev)
-				__joystick_handler(__pdev, ret);
-			prev_key = ret;
-		}
+	if (IS_ERR(sense_data->joystick_thread)) {
+		return -EPERM;
 	}
+
+	return 0;
 }
 
-void rpisense_joystick_handler_register(struct platform_device *pdev, joystick_handler_t joystick_handler) {
-	__joystick_handler = joystick_handler;
-	__pdev = pdev;
-}
-
-void rpisense_init(void) {
-	int i;
-
-	__joystick_handler = NULL;
-
-	for (i = 0; i < SIZE_FB; i++)
-		matrix[i] = 0;
-
-	rpisense = rpisense_get_dev();
-
-	kthread_run(joystick_poll, NULL, "rpisense-joystick_fn");
-
+void rpisense_remove(struct rpisense_data *sense_data)
+{
+	if (sense_data->joystick_thread) {
+		kthread_stop(sense_data->joystick_thread);
+	}
 }
