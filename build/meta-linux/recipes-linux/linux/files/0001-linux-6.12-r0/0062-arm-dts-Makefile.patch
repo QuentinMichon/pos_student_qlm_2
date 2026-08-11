@@ -1,0 +1,9 @@
+--- ./arch/arm/boot/dts/arm/Makefile
++++ ./arch/arm/boot/dts/arm/Makefile
+@@ -28,3 +28,6 @@
+ 	vexpress-v2p-ca9.dtb \
+ 	vexpress-v2p-ca15-tc1.dtb \
+ 	vexpress-v2p-ca15_a7.dtb
++
++# Infrabase
++dtb-$(CONFIG_ARCH_VIRT) += virt32.dtb

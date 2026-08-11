@@ -9,7 +9,7 @@ variables:
   # Define the rootfs path with unique identifiers for each namespace/project
   ROOTFS_PATH: "/mnt/gitlab-rootfs/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME"
 
-  ROOTFS_REPO_FOLDER: "rootfs.src"
+  ROOTFS_REPO_FOLDER: "linux/rootfs"
 
 pos:
   stage: build
@@ -42,7 +42,7 @@ upload_artifact:
 clean:
   stage: prepare
   script:
-    - rm $ROOTFS_PATH
+    - rm -rf $ROOTFS_PATH
   when: manual
   tags:
     - runners-server,shell

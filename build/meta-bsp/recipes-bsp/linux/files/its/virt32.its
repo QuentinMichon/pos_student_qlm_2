@@ -1,0 +1,86 @@
+/*
+ * Copyright (C) 2014-2026 Daniel Rossier <daniel.rossier@heig-vd.ch>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ *
+ * Standalone Linux on the virt32 (armv7) QEMU machine, the 32-bit twin of
+ * virt64.its. This file used to be a third copy of the Linux-on-AVZ ITS
+ * (virt32_avz.its, which remains the AVZ flavour); the naming now matches
+ * the virt64 pair: <plat>.its = standalone Linux, <plat>_avz.its = on AVZ.
+ */
+
+/dts-v1/;
+
+/ {
+	description = "Kernel and rootfs components for virt32 (armv7) environment";
+
+	images {
+
+		linux {
+			description = "Linux kernel";
+			data = /incbin/("${IB_LINUX_PATH}/arch/arm/boot/Image");
+			type = "kernel";
+			arch = "arm";
+			os = "linux";
+			compression = "none";
+
+			/*
+			 * RAM base 0x40000000 + the arm32 0x8000 text offset: a raw
+			 * (uncompressed) 32-bit Image is not relocatable — unlike the
+			 * arm64 Image, whose header lets U-Boot place it, and unlike a
+			 * zImage. Loading it anywhere else hangs right after
+			 * "Starting kernel ...".
+			 */
+			load = <0x40008000>;
+			entry = <0x40008000>;
+		};
+
+		fdt_linux {
+			description = "Linux device tree blob";
+			data = /incbin/("${IB_LINUX_PATH}/arch/arm/boot/dts/arm/${IB_PLATFORM}.dtb");
+			type = "flat_dt";
+			arch = "arm";
+			compression = "none";
+			load = <0x50000000>;
+		};
+
+		initrd {
+			description = "Initial rootfs (initrd)";
+			data = /incbin/("${IB_ROOTFS_PATH}/board/${IB_PLATFORM}/initrd.cpio.gz");
+			type = "ramdisk";
+			arch = "arm";
+			os = "linux";
+			/*
+			 * "none": U-Boot never decompresses ramdisks (the kernel
+			 * unpacks the gzip'd initramfs itself), and declaring a
+			 * compression here is deprecated — it only earns a WARNING
+			 * at boot.
+			 */
+			compression = "none";
+			load = <0x50c00000>;
+		};
+
+	};
+
+	configurations {
+		default = "conf_linux";
+
+		conf_linux {
+			description = "Linux on virt32";
+			kernel = "linux";
+			fdt = "fdt_linux";
+			ramdisk = "initrd";
+		};
+	};
+};

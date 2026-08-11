@@ -1,0 +1,306 @@
+.. _build_system:
+
+================
+The build system
+================
+
+The tree is built by **Infrabase**, a thin build system on top of **bitbake** —
+the same task engine Yocto uses, without the rest of Yocto. You will not have to
+write recipes in this course, but you do have to read ``local.conf``, know which
+recipe to rebuild, and understand where the output goes.
+
+The idea in one paragraph
+=========================
+
+A **recipe** describes how to build one component (the kernel, U-Boot, the root
+filesystem, …) as a series of **tasks**: ``do_fetch``, ``do_patch``,
+``do_configure``, ``do_build``, ``do_deploy``. Recipes live in **layers**
+(``build/meta-*``). bitbake reads ``build/conf/local.conf``, works out the
+dependency graph, and runs only the tasks that are out of date. Two front-end
+scripts drive it: ``build.sh`` and ``deploy.sh``.
+
+What differs from a plain ``make`` tree: the sources are not all in the
+repository. Some components (U-Boot, QEMU) are *fetched* on the first build and
+attached into the tree at ``u-boot/`` and ``qemu/``; others (``linux/``,
+``so3/``) are there already. Either way you end up with real source trees that
+you edit and recompile like any other.
+
+Tree layout
+===========
+
+.. code-block:: text
+
+   env.sh                  source this first, from the root
+   build/
+     conf/local.conf       THE configuration file — everything you tune is here
+     conf/bblayers.conf    generated, do not edit
+     meta-*/               the layers (recipes + classes)
+     bitbake/              bitbake itself
+     tmp/                  all build output: tmp/work, toolchains, stamps
+   scripts/                build.sh, deploy.sh, st.sh, dbuild.sh, …
+   docker/build-env/       the build container
+   linux/                  Linux kernel, root filesystem (buildroot), user space
+   so3/                    the SO3 operating system
+   u-boot/  qemu/          fetched components, attached here
+   filesystem/             bootable output: sdcard.img.<platform>, <platform>.itb
+   labo/                   the lab handouts
+   doc/                    this documentation
+
+Two rules worth remembering:
+
+* ``build/`` is **tracked in git** — it holds the layers. Never delete it. Only
+  ``build/tmp/`` is generated; that one you may ``rm -rf`` for a clean slate, at
+  the price of a full rebuild.
+* Everything under ``filesystem/`` is output, rebuilt by ``deploy.sh``.
+
+Configuration — ``build/conf/local.conf``
+=========================================
+
+One file, all the knobs, all prefixed ``IB_``. The syntax ``VAR:override = …``
+scopes a value to one platform: ``IB_CONFIG:linux:virt32`` applies to Linux on
+``virt32`` only.
+
+The variables you will actually touch:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 32 68
+
+   * - Variable
+     - Meaning
+   * - ``IB_PLATFORM``
+     - The target: ``virt32``, ``virt64``, ``rpi4``, ``rpi4_64``. Everything
+       else follows from it.
+   * - ``IB_CONFIG:linux:<plat>``
+     - Kernel defconfig, e.g. ``virt32_defconfig``, ``bcm2711_defconfig``.
+   * - ``IB_CONFIG:so3:<plat>``
+     - SO3 defconfig, e.g. ``virt32_fb_defconfig`` (framebuffer + input).
+   * - ``IB_TARGET_ITS:<os>:<plat>``
+     - Which *image tree source* is used to build the FIT image — i.e. which
+       kernel, device tree and initrd get packed into ``<platform>.itb``.
+   * - ``IB_RAMFS_SOURCE``
+     - ``rootfs`` packs the full buildroot filesystem into the FIT and runs from
+       RAM; ``initrd`` packs a small busybox ramfs that then ``switch_root``\ s
+       onto the ext4 partition.
+   * - ``IB_STORAGE_MODE:<plat>``
+     - ``soft`` — a loopback image file (the ``virt`` platforms). ``hard`` — a
+       **real block device** (the Raspberry Pi's SD card).
+   * - ``IB_STORAGE_DEVICE:<plat>``
+     - The device used in ``hard`` mode, e.g. ``mmcblk0``. Deliberately
+       commented out by default, so that a stray ``hard`` deploy cannot
+       overwrite a disk you care about.
+   * - ``IB_ROOTFS_SIZE``
+     - Size of the generated image, default ``2G``.
+   * - ``BB_NUMBER_THREADS``
+     - Build parallelism; set it to your core count.
+
+After changing the platform, a rebuild is not always enough: the kernel and
+buildroot keep a ``.config`` that does not know the platform moved under it. If
+something looks stale, clean the recipe first (``build.sh -c <recipe>``).
+
+Recipes and BSPs
+================
+
+.. code-block:: console
+
+   $ build.sh -l          # every recipe
+   $ deploy.sh -l         # only those that can be deployed
+
+The ones that matter here:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Recipe
+     - What it builds
+   * - ``bsp-linux``
+     - **The full Linux system**: U-Boot, the kernel, the root filesystem, the
+       user space, and the boot image that ties them together.
+   * - ``bsp-so3``
+     - The full SO3 system, same idea.
+   * - ``linux`` / ``so3``
+     - The Linux / SO3 kernel alone.
+   * - ``uboot``
+     - The bootloader.
+   * - ``buildroot`` / ``rootfs-linux``
+     - buildroot itself, then the populated root filesystem.
+   * - ``usr-linux`` / ``usr-so3``
+     - The user-space applications, and for Linux the out-of-tree modules.
+   * - ``filesystem``
+     - Creates and partitions the storage image.
+   * - ``qemu``
+     - The patched emulator — it carries the teaching devices such as ``vext``.
+   * - ``sense-hat``
+     - Prepares the host-side Sense HAT emulator (a Python virtual environment
+       under ``build/tmp``). Needed once, for ``st.sh -g``.
+   * - ``musl-toolchain``
+     - The MUSL cross toolchain used to compile the SO3 user space.
+
+A **BSP** recipe (``bsp-linux``, ``bsp-so3``) pulls its whole dependency tree; a
+**component** recipe builds just itself. ``build.sh bsp-linux`` builds
+everything; ``build.sh linux`` only recompiles the kernel — which is what you
+want nine times out of ten.
+
+Building — ``build.sh``
+=======================
+
+.. code-block:: text
+
+   build.sh [-h] [-l] [-c] [-v] <recipe>
+
+   -l   list the recipes
+   -c   clean the recipe first, then rebuild
+   -v   verbose (the full bitbake log)
+   -h   help
+
+.. code-block:: console
+
+   $ build.sh bsp-linux           # everything
+   $ build.sh linux               # just the kernel
+   $ build.sh -c uboot            # clean rebuild of U-Boot
+   $ build.sh -v -c bsp-linux     # clean rebuild of everything, verbose
+
+You can also drive bitbake directly, one task at a time — handy when a build
+fails and you want to re-run just the failing step:
+
+.. code-block:: console
+
+   $ bitbake linux -c configure
+   $ bitbake linux -c build
+
+The task name drops the ``do_`` prefix.
+
+Deploying — ``deploy.sh``
+=========================
+
+.. code-block:: console
+
+   $ deploy.sh bsp-linux          # full: FIT image + root filesystem + storage
+   $ deploy.sh usr-linux          # only the user-space part
+
+Deployment is what produces something bootable. It builds the FIT image
+(``filesystem/<platform>.itb`` — kernel, device tree and initrd in a single file
+that U-Boot loads with ``bootm``), then mounts the storage image and copies
+everything into it.
+
+That mounting is why deployment needs root: ``losetup``, ``mkfs``, ``mount``.
+bitbake itself always runs as **you**; only those individual operations are
+escalated. Inside the container this is already arranged. On a native host, run
+this once:
+
+.. code-block:: console
+
+   $ scripts/common/setup_sudo.sh
+
+Otherwise the build dies mid-task with *"sudo: a password is required"* — see
+:ref:`troubleshooting`.
+
+.. important::
+
+   ``umount.sh`` before you redeploy. If the storage image is still mounted from
+   a previous run, the deploy reuses that mount instead of a fresh one.
+
+Fast edit/build loops
+=====================
+
+Rebuilding ``bsp-linux`` for a one-line change wastes your afternoon. Use the
+smallest recipe that covers what you changed:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 44 56
+
+   * - You changed…
+     - Rebuild with
+   * - the Linux kernel, or a driver in it
+     - ``build.sh linux`` → ``deploy.sh bsp-linux``
+   * - a user-space application, or a module
+     - ``build.sh usr-linux`` → ``deploy.sh usr-linux``
+   * - the SO3 kernel
+     - ``build.sh so3`` → ``deploy.sh bsp-so3``
+   * - the root filesystem contents
+     - ``build.sh rootfs-linux`` → ``deploy.sh bsp-linux``
+
+For the tightest loop on user space there is ``makeusr.sh``, which skips bitbake
+and runs ``cmake``/``make`` directly. Run it **from** the ``usr`` directory:
+
+.. code-block:: console
+
+   $ cd linux/usr && makeusr.sh          # applications + kernel modules
+   $ cd so3/usr   && makeusr.sh          # SO3 applications
+
+It stops at the local deploy (``build/deploy``); pushing that into the root
+filesystem still needs ``deploy.sh usr-linux``.
+
+One thing the build does for you: buildroot has no "nothing to do" fast path —
+left alone it re-copies the whole target tree and regenerates ``rootfs.cpio`` on
+every single build. The recipe therefore hashes what buildroot actually consumes
+(the configuration, the patched source, the board overlays) and skips the make
+when none of it moved, which is the ``buildroot: inputs unchanged … skipping``
+line you will see on a repeat build. Edit anything it consumes and it rebuilds;
+``build.sh -c buildroot`` forces it regardless.
+
+Storage images
+==============
+
+Three scripts wrap the storage tasks:
+
+.. code-block:: console
+
+   $ init_storage.sh      # create + partition + format the image or the SD card
+   $ mount.sh             # mount its partitions
+   $ umount.sh            # unmount them
+
+In ``soft`` mode (the ``virt`` platforms) you rarely call them: ``deploy.sh``
+creates ``sdcard.img.<platform>`` on the fly when it is missing. In ``hard`` mode
+(the Raspberry Pi) ``init_storage.sh`` is a deliberate, explicit step — see
+:ref:`running-hardware`.
+
+``mount.sh`` and ``umount.sh`` also open a **cpio archive** instead of the
+storage, which is how you edit a ramfs without rebuilding it. ``mount.sh -h``
+lists the whole set; the short version:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - Form
+     - What it opens
+   * - ``mount.sh``
+     - The two partitions of the storage, as above.
+   * - ``mount.sh -i [platform]``
+     - ``board/<plat>/initrd.cpio``, extracted into ``filesystem/p1`` under
+       fakeroot — no sudo, no bitbake. Repack with ``umount.sh -i``.
+   * - ``mount.sh ramfs|rootfs [recipe]``
+     - The same idea through bitbake, for any rootfs recipe (default
+       ``rootfs-linux``): it unpacks ``board/<plat>/{initrd,rootfs}.cpio`` into
+       that recipe's work directory. Needs root — ``cpio -id`` restores device
+       nodes.
+
+.. important::
+
+   In the build container, a mount lives only as long as the container that made
+   it. ``dbuild.sh mount.sh`` mounts inside its own mount namespace and the mount
+   is gone the moment the command returns, so pairing it with a *later*
+   ``dbuild.sh`` invocation silently does nothing. Do the mount and whatever uses
+   it in the same container — from an interactive ``dbuild.sh`` shell.
+   ``deploy.sh`` is unaffected: it mounts and uses the mount within one run.
+
+The layout is the same either way: partition 1 is a FAT ``boot`` partition
+holding the FIT image, partition 2 an ext4 ``rootfs1``.
+
+Patching fetched components
+===========================
+
+U-Boot and QEMU are fetched, so changes to them cannot simply be committed as
+files: they are kept as **patch sets** under
+``build/meta-*/recipes-*/…/files/``. After editing such a source tree,
+regenerate the patches:
+
+.. code-block:: console
+
+   $ updiff.sh uboot
+
+Your own kernel, SO3 and user-space changes need none of this — those trees are
+part of the repository, so you commit them normally.

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
+     role="img" aria-label="POS">
+  <title>POS</title>
+  <desc>Favicon: the two-chip port mark of pos_logo.svg, reduced to what still
+  reads at 16 pixels — two blocks and the arrow between them.</desc>
+  <rect width="64" height="64" rx="12" fill="#3B4252"/>
+  <rect x="10" y="20" width="16" height="24" rx="3" fill="#FFFFFF"/>
+  <rect x="42" y="20" width="16" height="24" rx="3" fill="#E0241A"/>
+  <path d="M28 32 H38 M34 27 L40 32 L34 37" fill="none" stroke="#FFFFFF"
+        stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

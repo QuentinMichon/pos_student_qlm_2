@@ -427,7 +427,7 @@ class ScreenWidget(Gtk.DrawingArea):
                     with self._size_lock:
                         img = self._board_scaled.copy()
                         pixels = GdkPixbuf.Pixbuf.new_from_bytes(
-                            GLib.Bytes.new(self._screen_client.rgb_array.tostring()),
+                            GLib.Bytes.new(self._screen_client.rgb_array.tobytes()),
                             colorspace=GdkPixbuf.Colorspace.RGB, has_alpha=False,
                             bits_per_sample=8, width=8, height=8, rowstride=8 * 3)
                         pixel_rect = Gdk.Rectangle()

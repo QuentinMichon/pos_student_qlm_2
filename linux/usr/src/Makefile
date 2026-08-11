@@ -1,1 +1,0 @@
-TARGETS := display vextctl

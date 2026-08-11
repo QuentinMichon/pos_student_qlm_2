@@ -1,0 +1,5 @@
+fdt_high=ffffffff
+initrd_high=ffffffff
+start=fatload mmc 0 0x30000000 rpi4.itb; bootm 0x30000000
+
+bootargs=earlycon=uart8250,mmio32,0xfe215040 console=ttyS0,115200 root=/dev/ram coherent_pool=1M 8250.nr_uarts=1 cma=64M fsck.repair=yes rootwait
