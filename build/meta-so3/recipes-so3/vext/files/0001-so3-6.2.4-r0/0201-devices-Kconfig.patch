@@ -1,0 +1,14 @@
+--- a/so3/devices/Kconfig
++++ b/so3/devices/Kconfig
+@@ -19,7 +19,10 @@
+ 
+ config INPUT
+ 	bool "Input device support"
+-	
++
++config VEXT
++	bool "VEXT teaching device (/dev/vext_led*, /dev/vext_input)"
++
+ source "devices/serial/Kconfig"
+ source "devices/mmc/Kconfig"
+ source "devices/ramdev/Kconfig"

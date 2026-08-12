@@ -1,0 +1,70 @@
+--- /dev/null
++++ b/hw/arm/vext/vext.h
+@@ -0,0 +1,67 @@
++/*
++ * Copyright (C) 2013-2014 Romain Bornet <romain.bornet@heig-vd.ch>
++ * Copyright (C) 2016-2020 Daniel Rossier <daniel.rossier@heig-vd.ch>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
++ *
++ */
++
++#ifndef VEXT_H
++#define VEXT_H
++
++#include "qemu/osdep.h"
++#include "hw/sysbus.h"
++#include "qemu/log.h"
++#include "qemu/module.h"
++#include "json/cjson.h"
++
++typedef struct
++{
++    SysBusDevice busdev;
++    MemoryRegion iomem;
++    uint16_t regs[512];		/* 1KB (512 * 16bits registers) register map */
++
++    qemu_irq irq;
++} vext_state_t;
++
++/* Implemented registers addresses */
++#define VEXT_SWITCH		0x12
++#define VEXT_IRQ_CTRL		0x18
++#define VEXT_7SEG1		0x30
++#define VEXT_7SEG2		0x32
++#define VEXT_7SEG3		0x34
++#define VEXT_LED		0x3A
++#define VEXT_LCD_CONTROL	0x36
++#define VEXT_LCD_STATUS		0x38
++
++/* Masks */
++#define VEXT_IRQ_STATUS_MASK 	0x10
++#define VEXT_IRQ_CLEAR_MASK    	0x01
++#define VEXT_IRQ_EN_MASK       	0x80
++#define VEXT_IRQ_SWITCH_MASK   	0x0E
++
++/* Debug output configuration #define or #undef */
++#if 1
++#define VEXT_EMUL_DEBUG
++#endif
++
++#ifdef VEXT_EMUL_DEBUG
++#define DBG(fmt, ...) \
++do { printf("(qemu)vext: " fmt , ## __VA_ARGS__); } while (0)
++#else
++#define DBG(fmt, ...) \
++do { } while (0)
++#endif
++
++#endif /* VEXT_H */

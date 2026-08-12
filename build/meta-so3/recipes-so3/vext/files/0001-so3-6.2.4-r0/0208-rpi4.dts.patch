@@ -1,0 +1,32 @@
+--- a/so3/dts/rpi4.dts
++++ b/so3/dts/rpi4.dts
+@@ -62,8 +62,10 @@
+ 		interrupt-parent = <&gic>;
+ 
+ 		/*
+-		 * AUX (mini UART) — SPI 93, the value Broadcom's
++		 * AUX (mini UART) — SPI 93, as the Broadcom
+ 		 * bcm2711-rpi-4-b.dtb gives for /soc/serial@7e215040.
++		 * Without it the console falls back to polling and Ctrl-C
++		 * cannot raise SIGINT.
+ 		 */
+ 		interrupts = <0 93 4>;
+ 		status = "ok";
+@@ -73,7 +75,7 @@
+ 	i2c1:i2c1@fe804000 {
+ 		compatible = "bcm,i2c_bsc";
+ 		reg = <0xfe804000 0x400>;
+-		status = "disabled";
++		status = "ok";
+ 		interrupt-parent = <&gic>;
+ 
+ 		/* IRQ 53 of VC which start at SPI96 -> 96 + 53 = 149 */
+@@ -100,7 +102,7 @@
+ 		compatible = "bcm,rpisense";
+ 		interrupt-parent = <&gic>;
+ 		interrupts = <0 113 4>;
+-		status = "disabled";
++		status = "ok";
+ 	};
+ 
+ 	/*

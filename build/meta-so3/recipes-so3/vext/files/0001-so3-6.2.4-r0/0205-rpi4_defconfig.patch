@@ -1,0 +1,24 @@
+--- a/so3/configs/rpi4_defconfig
++++ b/so3/configs/rpi4_defconfig
+@@ -38,10 +38,11 @@
+ #
+ CONFIG_UART=y
+ CONFIG_IO_MAPPING_BASE=0xe0000000
+-# CONFIG_I2C is not set
++CONFIG_I2C=y
+ # CONFIG_NET is not set
+ # CONFIG_FB is not set
+ # CONFIG_INPUT is not set
++CONFIG_VEXT=y
+ # CONFIG_NS16550 is not set
+ CONFIG_BCM283x_MU_UART=y
+ CONFIG_UART_LL_PADDR=0xfe215040
+@@ -50,6 +51,8 @@
+ CONFIG_ARM_TIMER=y
+ CONFIG_GIC=y
+ CONFIG_GIC_V2=y
++CONFIG_I2C_BSC=y
++CONFIG_RPI_SENSE=y
+ 
+ #
+ # SO3 Applications

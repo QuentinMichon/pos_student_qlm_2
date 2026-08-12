@@ -1,0 +1,8 @@
+--- a/hw/arm/meson.build
++++ b/hw/arm/meson.build
+@@ -72,3 +72,5 @@
+ system_ss.add(when: 'CONFIG_TOSA', if_true: files('tosa.c'))
+ 
+ hw_arch += {'arm': arm_ss}
++
++subdir('vext')

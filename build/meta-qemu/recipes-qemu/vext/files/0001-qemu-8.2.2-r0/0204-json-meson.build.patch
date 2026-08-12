@@ -1,0 +1,5 @@
+--- /dev/null
++++ b/hw/arm/vext/json/meson.build
+@@ -0,0 +1,2 @@
++specific_ss.add(when: 'CONFIG_VEXT', if_true: files('cjson.c'))
++

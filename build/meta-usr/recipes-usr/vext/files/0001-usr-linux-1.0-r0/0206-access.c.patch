@@ -1,0 +1,92 @@
+--- /dev/null
++++ ./src/modules/access.c
+@@ -0,0 +1,89 @@
++ * access.c
++ *
++ * Copyright (c) 2020 HEIG-VD, REDS Institute
++ *******************************************************************/
++
++#include <linux/init.h>
++#include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/printk.h>
++#include <linux/interrupt.h>
++#include <linux/mod_devicetable.h>
++#include <linux/platform_device.h>
++#include <linux/leds.h>
++#include <linux/input.h>
++#include <linux/slab.h>
++#include <linux/of.h>
++
++#include <asm/io.h>
++
++/*
++ * The Sense HAT path needs <linux/mfd/rpisense/core.h>, which only the
++ * Raspberry Pi kernel fork carries — a vanilla kernel (virt32/virt64) has no
++ * such MFD. Gate it so the module still builds there, MMIO-only; the Makefile
++ * defines VEXT_RPISENSE on the rpi4 platforms. Same shape as SO3's vext.c,
++ * whose rpi4 path sits behind CONFIG_RPI_SENSE.
++ */
++#ifdef VEXT_RPISENSE
++#include "rpisense.h"
++#endif
++
++/*
++ * Driver Linux du peripherique vExt (labo 02/06/07)
++ *
++ * Squelette : seules les signatures sont fournies. Les types, structures
++ * d'etat et enregistrements sont a reconstruire, en plus des corps.
++ *
++ * Le chemin Sense HAT (rpi4) est compile sous VEXT_RPISENSE.
++ */
++
++static irqreturn_t process_input(int irq, void *dev_id)
++{
++	/* A completer (POS) */
++}
++
++static irqreturn_t switch_isr(int irq, void *dev_id)
++{
++	/* A completer (POS) */
++}
++
++static void led_set(struct led_classdev *led_cdev, enum led_brightness brightness)
++{
++	/* A completer (POS) */
++}
++
++/* sous VEXT_RPISENSE */
++void rpisense_process_switch(struct platform_device *pdev, int key)
++{
++	/* A completer (POS) */
++}
++
++static ssize_t vext_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
++{
++	/* A completer (POS) */
++}
++
++static ssize_t vext_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t len)
++{
++	/* A completer (POS) */
++}
++
++static int vext_probe(struct platform_device *pdev)
++{
++	/* A completer (POS) */
++}
++
++static void vext_remove(struct platform_device *pdev)
++{
++	/* A completer (POS) */
++}
++
++static int access_init(void)
++{
++	/* A completer (POS) */
++}
++
++static void access_exit(void)
++{
++	/* A completer (POS) */
++}

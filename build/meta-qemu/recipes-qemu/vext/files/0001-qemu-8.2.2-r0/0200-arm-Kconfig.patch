@@ -1,0 +1,13 @@
+--- a/hw/arm/Kconfig
++++ b/hw/arm/Kconfig
+@@ -32,6 +32,10 @@
+     select VIRTIO_MEM_SUPPORTED
+     select ACPI_CXL
+     select ACPI_HMAT
++    select VEXT
++
++config VEXT
++    bool
+ 
+ config CHEETAH
+     bool

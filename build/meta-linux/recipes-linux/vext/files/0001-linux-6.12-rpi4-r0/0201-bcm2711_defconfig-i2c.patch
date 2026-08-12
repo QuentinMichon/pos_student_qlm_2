@@ -1,0 +1,11 @@
+--- a/arch/arm/configs/bcm2711_defconfig
++++ b/arch/arm/configs/bcm2711_defconfig
+@@ -724,7 +724,7 @@
+ CONFIG_I2C_MUX_PCA954x=m
+ CONFIG_I2C_MUX_PINCTRL=m
+ CONFIG_I2C_BCM2708=m
+-CONFIG_I2C_BCM2835=m
++CONFIG_I2C_BCM2835=y
+ CONFIG_I2C_BRCMSTB=m
+ CONFIG_I2C_GPIO=m
+ CONFIG_I2C_ROBOTFUZZ_OSIF=m

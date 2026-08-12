@@ -1,0 +1,89 @@
+--- /dev/null
++++ b/so3/devices/vext.c
+@@ -0,0 +1,86 @@
++ * Copyright (C) 2014-2020 Daniel Rossier <daniel.rossier@heig-vd.ch>
++ * Copyright (C) 2020 David Truan <david.truan@heig-vd.ch>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
++ *
++ */
++
++/* VEXT teaching device: exposes /dev/vext_led0..4 (LEDs) and /dev/vext_input
++ * (joystick/switch events). On QEMU virt32/virt64 it is an MMIO device wired
++ * into the machine; on the real RPi4 it is backed by the rpisense driver. */
++
++#include <vfs.h>
++#include <heap.h>
++#include <memory.h>
++#include <completion.h>
++
++#include <device/fdt.h>
++#include <device/irq.h>
++#include <device/driver.h>
++
++#include <device/arch/rpisense.h>
++
++#include <uapi/linux/input.h>
++
++/*
++ * Driver SO3 du peripherique vExt (labo 09/10/11)
++ *
++ * Squelette : seules les signatures sont fournies. Les types, structures
++ * d'etat et enregistrements sont a reconstruire, en plus des corps.
++ *
++ * Les fonctions marquees sont a replacer sous leur directive d'origine.
++ */
++
++static int vext_write(int fd, const void *buffer, int count)
++{
++	/* A completer (POS) */
++}
++
++static irq_return_t process_input(int irq, void *dev_id)
++{
++	/* A completer (POS) */
++}
++
++/* sous CONFIG_RPI_SENSE */
++void rpisense_process_switch(void *arg, int key)
++{
++	/* A completer (POS) */
++}
++
++static irq_return_t switch_isr(int irq, void *dev_id)
++{
++	/* A completer (POS) */
++}
++
++static int vext_read(int fd, void *buffer, int count)
++{
++	/* A completer (POS) */
++}
++
++int vext_mmio_init(dev_t *dev, int fdt_offset)
++{
++	/* A completer (POS) */
++}
++
++/* sous CONFIG_RPI_SENSE */
++int vext_rpi4_init(dev_t *dev, int fdt_offset)
++{
++	/* A completer (POS) */
++}
++
++/* sous CONFIG_RPI_SENSE */
++void vext_rpi4_postinit(void)
++{
++	/* A completer (POS) */
++}

@@ -1,0 +1,10 @@
+--- /dev/null
++++ b/hw/arm/vext/meson.build
+@@ -0,0 +1,7 @@
++specific_ss.add(when: 'CONFIG_VEXT', if_true: files('vext.c'))
++specific_ss.add(when: 'CONFIG_VEXT', if_true: files('vext_emul.c'))
++specific_ss.add(when: 'CONFIG_VEXT', if_true: files('vext_example_1.c'))
++specific_ss.add(when: 'CONFIG_VEXT', if_true: files('vext_example_2.c'))
++specific_ss.add(when: 'CONFIG_VEXT', if_true: files('vext_example_3.c'))
++
++subdir('json')

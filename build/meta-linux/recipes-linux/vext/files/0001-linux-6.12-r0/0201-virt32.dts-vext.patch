@@ -1,0 +1,24 @@
+--- a/arch/arm/boot/dts/arm/virt32.dts
++++ b/arch/arm/boot/dts/arm/virt32.dts
+@@ -420,4 +420,21 @@
+ 		rng-seed = <0xcb39787c 0x869fa2ed 0x55a210b0 0x6907d22a 0xfa3f0c2d 0xaa599a97 0x2ca4d708 0xbe005cd6>;
+ 		kaslr-seed = <0x6b4564ff 0xbac1238a>;
+ 	};
++	/*
++	 * The vext teaching device, emulated by the patched QEMU (hw/arm/vext,
++	 * VIRT_VEXT at 0x08804000, SPI 13 — the same memmap as the 64-bit virt
++	 * machine, both come from hw/arm/virt.c). QEMU generates this device
++	 * tree but knows nothing of vext, so the node is added here.
++	 *
++	 * interrupt-parent is the raw phandle of intc@8000000 in THIS dump
++	 * (0x8005 — it differs from the arm64 one, phandles are allocation
++	 * order): the file carries no labels.
++	 */
++	vext@8804000 {
++		compatible = "virt32,vext";
++		reg = <0x00 0x8804000 0x00 0x1000>;
++		interrupt-parent = <0x8005>;
++		interrupts = <0x00 0x0d 0x04>;
++		platform_type = "virt";
++	};
+ };

@@ -1,0 +1,10 @@
+--- a/so3/configs/virt64_fb_defconfig
++++ b/so3/configs/virt64_fb_defconfig
+@@ -57,6 +57,7 @@
+ # CONFIG_VIRTFB is not set
+ CONFIG_PL050_KMI=y
+ # CONFIG_VIRT_INPUT is not set
++CONFIG_VEXT=y
+ 
+ #
+ # SO3 Applications

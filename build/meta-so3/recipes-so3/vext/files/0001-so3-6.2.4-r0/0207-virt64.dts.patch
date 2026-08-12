@@ -1,0 +1,24 @@
+--- a/so3/dts/virt64.dts
++++ b/so3/dts/virt64.dts
+@@ -161,6 +161,21 @@
+ 
+ 		status = "ok";
+ 	};
++
++		/* VEXT teaching device — MMIO peripheral wired by the so3 QEMU patch
++		 * (VIRT_VEXT @ 0x08804000, IRQ SPI 13). Exposes /dev/vext_led0..4 and
++		 * /dev/vext_input. The interrupt properties and the led/switch/irqctl
++		 * children are yours to add (lab10). */
++		vext@08804000 {
++			#address-cells = <1>;
++			#size-cells = <0>;
++
++			compatible = "virt64,vext";
++			reg = <0x0 0x08804000 0x0 0x1000>;
++
++			status = "ok";
++
++		};
+ 	
+ 	/*
+         https://github.com/psawargaonkar/xvisor-next/blob/95b887c82a37c8d9ee126e061cf4d8f383ec7d01/arch/arm/board/generic/dts/vexpress/a15/vexpress-a15.dtsi

@@ -1,0 +1,11 @@
+--- a/usr/lib/linux/input.h
++++ b/usr/lib/linux/input.h
+@@ -16,7 +16,7 @@
+ #ifndef _UAPI_INPUT_EVENT_CODES_H
+ #define _UAPI_INPUT_EVENT_CODES_H
+ 
+-#include <types.h>
++#include <stdint.h>
+ 
+ struct input_event {
+ 	uint16_t type;

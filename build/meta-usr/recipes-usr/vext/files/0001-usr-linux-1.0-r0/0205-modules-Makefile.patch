@@ -1,0 +1,37 @@
+--- ./src/modules/Makefile
++++ ./src/modules/Makefile
+@@ -1,7 +1,10 @@
+ obj-m :=  qemu.o  
+ 
++# senseled is SOO material (it includes soo/vbus.h, which only the SOO-patched
++# kernel carries) — it cannot build against the plain Raspberry Pi fork this
++# lab uses, so the rpi4 branch drops it and builds the vext module alone.
+ ifeq ($(IB_PLATFORM),$(filter $(IB_PLATFORM),rpi4))
+-obj-m := senseled.o
++obj-m := access_mod.o
+ endif
+ 
+ ifeq ($(IB_PLATFORM),$(filter $(IB_PLATFORM),rpi4_64))
+@@ -9,7 +12,21 @@
+ endif
+ 
+ ifeq ($(IB_PLATFORM),$(filter $(IB_PLATFORM),virt64))
+-obj-m := modtry.o
++obj-m := modtry.o access.o
++endif
++
++ifeq ($(IB_PLATFORM),$(filter $(IB_PLATFORM),virt32))
++obj-m := access.o
++endif
++
++# vext: on the rpi4 platforms the driver carries the real Sense HAT backend
++# (rpisense.c, direct I2C — the rpisense MFD is gone from modern RPi kernels),
++# gated by VEXT_RPISENSE; the composed module is access_mod.ko there, since a
++# multi-object module cannot share the name of one of its objects. On the virt
++# platforms access.c alone (MMIO path) builds as access.ko.
++ifeq ($(IB_PLATFORM),$(filter $(IB_PLATFORM),rpi4 rpi4_64))
++access_mod-objs := access.o rpisense.o
++ccflags-y += -DVEXT_RPISENSE
+ endif
+ 
+ 

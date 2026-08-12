@@ -1,0 +1,135 @@
+--- /dev/null
++++ b/hw/arm/vext/vext_example_1.c
+@@ -0,0 +1,132 @@
++/*
++ * Copyright (C) 2013-2014 Romain Bornet <romain.bornet@heig-vd.ch>
++ * Copyright (C) 2016-2020 Daniel Rossier <daniel.rossier@heig-vd.ch>
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
++ *
++ */
++
++#include "qemu/osdep.h"
++#include "exec/memory.h"
++#include "hw/sysbus.h"
++
++#define VEXT_NAME "vext_example_1"
++
++#define DATA_0_REG 0x10
++#define DATA_1_REG 0x12
++
++#define REG_BYTE (sizeof(uint16_t))
++#define REG_BIT (REG_BYTE * 8)
++#define REG_MASK ((1 << REG_BIT) - 1)
++
++#define IS_ACCESSED(start, size, reg_offset) \
++	(((start) <= (reg_offset)) && ((reg_offset) < ((start) + (size))))
++
++#define VAL_REG_OFFSET(start, reg_offset) (((reg_offset) - (start)) * 8)
++
++#define VALUE_TO_REG(val, start, reg_offset) \
++	(((val) >> VAL_REG_OFFSET(start, reg_offset)) & (REG_MASK))
++
++#define REG_TO_VALUE(reg, start, reg_offset) \
++	(((reg) & REG_MASK) << VAL_REG_OFFSET(start, reg_offset))
++
++typedef struct {
++	SysBusDevice busdev;
++	MemoryRegion iomem;
++	uint16_t data0;
++	uint16_t data1;
++} VextState;
++
++/**
++ * Porcess the read access to the VEXT device
++ */
++static uint64_t vext_read(void *opaque, hwaddr offset, unsigned size)
++{
++	VextState *state = (VextState *)opaque;
++	uint64_t ret = 0;
++
++	if (size == 1) {
++		return 0;
++	}
++
++	printf(VEXT_NAME " read\n");
++
++	// offset <= DATA_0_REG && DATA_0_REG < (offset + size)
++	if (IS_ACCESSED(offset, size, DATA_0_REG)) {
++
++		// ret |= (state->data0 & 0xffff) << ((DATA_0_REG - offset) * 8)
++		ret |= REG_TO_VALUE(state->data0, offset, DATA_0_REG);
++	}
++
++	if (IS_ACCESSED(offset, size, DATA_1_REG)) {
++		ret |= REG_TO_VALUE(state->data1, offset, DATA_0_REG);
++	}
++
++	return ret;
++}
++
++/**
++ * Process the write access to the VEXT device
++ */
++static void vext_write(void *opaque, hwaddr offset, uint64_t value,
++		       unsigned size)
++{
++	VextState *state = (VextState *)opaque;
++
++	if (size == 1) {
++		return;
++	}
++
++	printf(VEXT_NAME " write\n");
++
++	if (IS_ACCESSED(offset, size, DATA_0_REG)) {
++		// state->data0 = (value >> ((DATA_0_REG - offset) * 8)) & 0xffff
++		state->data0 = VALUE_TO_REG(value, offset, DATA_0_REG);
++	}
++
++	if (IS_ACCESSED(offset, size, DATA_1_REG)) {
++		state->data1 = VALUE_TO_REG(value, offset, DATA_1_REG);
++	}
++}
++
++static const MemoryRegionOps vext_ops = {
++	.read = vext_read,
++	.write = vext_write,
++	.endianness = DEVICE_NATIVE_ENDIAN,
++};
++
++static void vext_init(Object *obj)
++{
++	DeviceState *dev = DEVICE(obj);
++	SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
++	VextState *state = OBJECT_CHECK(VextState, dev, VEXT_NAME);
++
++	memory_region_init_io(&state->iomem, obj, &vext_ops, state, VEXT_NAME,
++			      0x1000);
++	sysbus_init_mmio(sbd, &state->iomem);
++
++	printf(VEXT_NAME " init\n");
++}
++
++static const TypeInfo vext_info = { .name = VEXT_NAME,
++				    .parent = TYPE_SYS_BUS_DEVICE,
++				    .instance_size = sizeof(VextState),
++				    .instance_init = vext_init };
++
++static void vext_register_types(void)
++{
++	type_register_static(&vext_info);
++}
++
++type_init(vext_register_types);

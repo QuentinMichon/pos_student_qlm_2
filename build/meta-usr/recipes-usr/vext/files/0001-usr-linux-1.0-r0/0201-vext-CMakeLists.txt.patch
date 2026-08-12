@@ -1,0 +1,12 @@
+--- /dev/null
++++ ./src/vext/CMakeLists.txt
+@@ -0,0 +1,9 @@
++
++# The vext teaching applications.
++#
++# display is the throwaway program lab02 uses to check the build and deploy
++# chain. vextctl, the sysfs LED driver of lab06, is yours to write: add it
++# here the same way once src/vext/vextctl.c exists.
++
++add_executable(display display.c)
++target_link_libraries(display c)

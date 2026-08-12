@@ -1,0 +1,24 @@
+--- a/so3/dts/rpi4_64.dts
++++ b/so3/dts/rpi4_64.dts
+@@ -71,7 +71,7 @@
+ 	i2c1:i2c1@fe804000 {
+ 		compatible = "bcm,i2c_bsc";
+ 		reg = <0x0 0xfe804000 0x0 0x400>;
+-		status = "disabled";
++		status = "ok";
+ 		interrupt-parent = <&gic>;
+         	
+ 		/* IRQ 53 of VC which start at SPI96 -> 96 + 53 = 149 */
+@@ -99,10 +99,11 @@
+         compatible = "bcm,rpisense";
+ 		interrupt-parent = <&gic>;
+ 		interrupts = <0 113 4>;
+-		status = "disabled";
++		status = "ok";
+     };
+ 
+ 	/*
++	/*
+ 	 * Present only so U-Boot's RPi 4 bootm fixup can copy the
+ 	 * firmware-corrected dma-ranges into this static DT (see u-boot
+ 	 * boot/bootm.c, CONFIG_BCM2711). Silences the "Can't find emmc2bus in

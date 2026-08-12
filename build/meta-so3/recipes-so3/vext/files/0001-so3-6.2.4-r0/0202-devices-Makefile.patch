@@ -1,0 +1,8 @@
+--- a/so3/devices/Makefile
++++ b/so3/devices/Makefile
+@@ -20,3 +20,5 @@
+ 
+ obj-y += mydev.o
+ obj-y += mem.o
++
++obj-$(CONFIG_VEXT) += vext.o
