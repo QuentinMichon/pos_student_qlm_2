@@ -108,12 +108,11 @@ do_install_apps () {
     usr_do_install_file_root "${IB_TARGET}/src/modules/*.ko"
 }
 
-do_clean:append () {
-
-    rm -f ${TMPDIR}/stamps/usr-linux*
-    rm -f ${WORKDIR}/*.patch
+python do_clean:append () {
+    import os
 
     # The whole IB_TARGET is regenerated from the patch set on every build,
     # so a clean removes it entirely (tree, re-attach backup and manifest).
-    rm -rf ${IB_TARGET} ${IB_TARGET}.back ${IB_TARGET}.attach.sha256
+    os.system(d.expand("rm -f ${TMPDIR}/stamps/usr-linux* ${WORKDIR}/*.patch"))
+    os.system(d.expand("rm -rf ${IB_TARGET} ${IB_TARGET}.back ${IB_TARGET}.attach.sha256"))
 }
