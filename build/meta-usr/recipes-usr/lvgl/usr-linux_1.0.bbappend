@@ -47,10 +47,13 @@ do_install_apps:append () {
     fi
 }
 
-do_clean:append () {
+python do_clean:append () {
+    import os
 
-    if echo ":${OVERRIDES}:" | grep -q ":lvgl"; then
-        rm -rf ${IB_TARGET}/lib/lv_port_linux
-        rm -rf ${WORKDIR}/git
-    fi
+    os.system(d.expand('''
+        if echo ":${OVERRIDES}:" | grep -q ":lvgl"; then
+            rm -rf ${IB_TARGET}/lib/lv_port_linux
+            rm -rf ${WORKDIR}/git
+        fi
+    '''))
 }

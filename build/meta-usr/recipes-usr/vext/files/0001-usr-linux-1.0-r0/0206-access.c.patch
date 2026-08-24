@@ -1,6 +1,7 @@
 --- /dev/null
 +++ ./src/modules/access.c
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,99 @@
++/*
 + * access.c
 + *
 + * Copyright (c) 2020 HEIG-VD, REDS Institute
@@ -43,11 +44,13 @@
 +static irqreturn_t process_input(int irq, void *dev_id)
 +{
 +	/* A completer (POS) */
++	return IRQ_HANDLED;
 +}
 +
 +static irqreturn_t switch_isr(int irq, void *dev_id)
 +{
 +	/* A completer (POS) */
++	return IRQ_HANDLED;
 +}
 +
 +static void led_set(struct led_classdev *led_cdev, enum led_brightness brightness)
@@ -64,16 +67,19 @@
 +static ssize_t vext_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 +{
 +	/* A completer (POS) */
++	return 0;
 +}
 +
 +static ssize_t vext_store(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t len)
 +{
 +	/* A completer (POS) */
++	return len;
 +}
 +
 +static int vext_probe(struct platform_device *pdev)
 +{
 +	/* A completer (POS) */
++	return 0;
 +}
 +
 +static void vext_remove(struct platform_device *pdev)
@@ -84,9 +90,13 @@
 +static int access_init(void)
 +{
 +	/* A completer (POS) */
++	return 0;
 +}
 +
 +static void access_exit(void)
 +{
 +	/* A completer (POS) */
 +}
++
++MODULE_LICENSE("GPL");
++MODULE_AUTHOR("HEIG-VD, REDS Institute");

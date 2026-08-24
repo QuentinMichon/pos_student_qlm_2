@@ -19,7 +19,8 @@ pos:
     - docker build . -t $CONTAINER_NAME
     - docker run --privileged -v $ROOTFS_PATH:/root/pos/$ROOTFS_REPO_FOLDER -t --env PATH="/opt/toolchains/gcc-linaro-11.3.1-2022.06-x86_64_arm-linux-gnueabihf/bin:$PATH" $CONTAINER_NAME sh -c "git checkout $ROOTFS_REPO_FOLDER && ./build_rootfs.sh"
   tags:
-    - runners-server,shell
+    - runners-server
+    - shell
 
 upload_artifact:
   stage: upload
@@ -37,7 +38,8 @@ upload_artifact:
       # - rpi4_64.rootfs.cpio
     expire_in: never
   tags:
-    - runners-server,shell
+    - runners-server
+    - shell
 
 clean:
   stage: prepare
@@ -45,5 +47,6 @@ clean:
     - rm -rf $ROOTFS_PATH
   when: manual
   tags:
-    - runners-server,shell
+    - runners-server
+    - shell
   

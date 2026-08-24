@@ -27,17 +27,17 @@ do_install_apps:append () {
     fi
 }
 
-do_clean:append() {
-  if echo ":${OVERRIDES}:" | grep -q ":soo"; then
+python do_clean:append() {
+    import os
 
-    rm -rf ${IB_TARGET}/src/soo   
-    rm -rf ${IB_TARGET}/include/soo
-    rm -rf ${IB_TARGET}/include/core
-
-    rm -rf ${S}
-    
-    [ -f ${IB_TARGET}.back/src/CMakeLists.txt ] && \
-      cp ${IB_TARGET}.back/src/CMakeLists.txt ${IB_TARGET}/src/ || true
-  
-  fi
+    os.system(d.expand('''
+        if echo ":${OVERRIDES}:" | grep -q ":soo"; then
+            rm -rf ${IB_TARGET}/src/soo
+            rm -rf ${IB_TARGET}/include/soo
+            rm -rf ${IB_TARGET}/include/core
+            rm -rf ${S}
+            [ -f ${IB_TARGET}.back/src/CMakeLists.txt ] && \\
+              cp ${IB_TARGET}.back/src/CMakeLists.txt ${IB_TARGET}/src/ || true
+        fi
+    '''))
 }

@@ -18,7 +18,17 @@ SRC_URI[sha256sum] = "847346c1b82c1a54b2c38f6edbd85549edeb17430b7d4d3da12620e296
 
 FILESPATH:prepend: := "${THISDIR}/files/0001-${PF}:"
 
+# Where the prebuilt qemu-system-* binaries live, for IB_QEMU_METHOD = "prebuilt".
+# Resolved here (not in qemu.bbclass) because THISDIR must point at this
+# recipe's own files/ dir, not the classes/ dir.
+IB_QEMU_PREBUILT_DIR = "${THISDIR}/files/prebuilt"
+
 require files/0001-${PF}-patches.inc
+
+# IB_QEMU_METHOD = "prebuilt": skip fetching/patching entirely (see comment above)
+do_fetch[noexec]  = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
+do_unpack[noexec] = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
+do_patch[noexec]  = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
 
 # Where the working directory will be placed in infrabase root dir
 IB_TARGET = "${IB_DIR}/qemu"
