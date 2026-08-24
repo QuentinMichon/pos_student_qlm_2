@@ -5,6 +5,11 @@
 do_configure[nostamp] = "1"
 qemu_do_configure () {
 
+	if [ "${IB_QEMU_METHOD}" = "prebuilt" ]; then
+		echo "IB_QEMU_METHOD=prebuilt: skipping configure"
+		return
+	fi
+
 	cd ${IB_DIR}/qemu
 
 	# Build the softmmu target of the current platform (QEMU_TARGET, selected
@@ -25,10 +30,16 @@ qemu_do_configure () {
 
 do_build[nostamp] = "1"
 do_build () {
+	if [ "${IB_QEMU_METHOD}" = "prebuilt" ]; then
+		echo "IB_QEMU_METHOD=prebuilt: copying prebuilt ${QEMU_TARGET} binary instead of compiling"
+		mkdir -p ${IB_DIR}/qemu/build
+		cp ${IB_QEMU_PREBUILT_DIR}/${QEMU_TARGET}/qemu-system-* ${IB_DIR}/qemu/build/
+		return
+	fi
+
 	echo "Building QEMU with ${CORES} cores..."
 	cd ${IB_DIR}/qemu
 	make -j${CORES}
 }
 
 EXPORT_FUNCTIONS do_configure
-
