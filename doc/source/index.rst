@@ -21,6 +21,8 @@
    build_system
    running
    troubleshooting
+   vExpress_register_description
+   vExt_json_api
 
 .. toctree::
    :maxdepth: 1
