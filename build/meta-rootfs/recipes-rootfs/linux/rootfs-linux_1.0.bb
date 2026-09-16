@@ -20,7 +20,6 @@ do_configure[depends] = "${IB_ROOTFS_METHOD}:do_configure"
 do_configure[noexec] = "1"
 
 do_build[depends] = "${IB_ROOTFS_METHOD}:do_build"
-do_build[depends] += "linux:do_build"
 
 # do_deploy is a pure DEPLOY step: it extracts the already-built rootfs.cpio
 # (apps baked in by usr-linux:do_deploy during the build) onto p2. It must

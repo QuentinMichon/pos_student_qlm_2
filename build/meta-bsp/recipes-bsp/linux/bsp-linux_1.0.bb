@@ -194,7 +194,7 @@ python do_deploy() {
 
 # do_itb runs in the BUILD chain only (it produces the .itb that deploy
 # consumes); deploy must not re-trigger it.
-addtask do_itb before do_build
+addtask do_itb before do_deploy
 addtask do_deploy
 
 do_deploy_boot[nostamp] = "1"
@@ -208,7 +208,7 @@ python do_deploy_boot() {
 }
 addtask do_deploy_boot
 
-do_clean[depends] = "usr-linux:do_clean rootfs-linux:do_clean linux:do_clean uboot:do_clean"
+do_clean[depends] = "usr-linux:do_clean linux:do_clean uboot:do_clean"
 python () {
     if d.getVar('IB_PLATFORM') == 'virt64':
         d.appendVarFlag('do_clean', 'depends', ' atf:do_clean optee:do_clean avz:do_clean')

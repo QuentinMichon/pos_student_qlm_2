@@ -1,52 +1,40 @@
 stages:
-  - prepare
   - build
-  - upload
+  - release
 
-variables:
-  CONTAINER_NAME: "$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME"
-
-  # Define the rootfs path with unique identifiers for each namespace/project
-  ROOTFS_PATH: "/mnt/gitlab-rootfs/$CI_PROJECT_NAMESPACE/$CI_PROJECT_NAME"
-
-  ROOTFS_REPO_FOLDER: "linux/rootfs"
-
-pos:
+build-rootfs:
+  timeout: 2h
   stage: build
+  image: redscalculator/pos-build:1.0
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes:
+        - build/meta-rootfs/**/*
+        - build/meta-usr/**/*
+        - linux/rootfs/**/*
+        - .gitlab-ci.yml
+    - when: manual
   script:
-    - echo "Creating persistent directory on the runner host at $ROOTFS_PATH"
-    - mkdir -p $ROOTFS_PATH
-    - docker build . -t $CONTAINER_NAME
-    - docker run --privileged -v $ROOTFS_PATH:/root/pos/$ROOTFS_REPO_FOLDER -t --env PATH="/opt/toolchains/gcc-linaro-11.3.1-2022.06-x86_64_arm-linux-gnueabihf/bin:$PATH" $CONTAINER_NAME sh -c "git checkout $ROOTFS_REPO_FOLDER && ./build_rootfs.sh"
-  tags:
-    - runners-server
-    - shell
-
-upload_artifact:
-  stage: upload
-  script:
-    - echo "Uploading rootfs.cpio artifact"
-    - cp $ROOTFS_PATH/board/virt32/rootfs.cpio virt32.rootfs.cpio
-    # - cp $ROOTFS_PATH/board/virt64/rootfs.cpio virt64.rootfs.cpio
-    # - cp $ROOTFS_PATH/board/rpi4/rootfs.cpio rpi4.rootfs.cpio
-    # - cp $ROOTFS_PATH/board/rpi4_64/rootfs.cpio rpi4_64.rootfs.cpio
+    - source env.sh
+    - IB_PLATFORM=virt32 build.sh rootfs-linux
+    - mkdir -p artifacts/virt32/images
+    - cp linux/rootfs/images/rootfs.cpio artifacts/virt32/images/rootfs.cpio
   artifacts:
     paths:
-      - virt32.rootfs.cpio
-      # - virt64.rootfs.cpio
-      # - rpi4.rootfs.cpio
-      # - rpi4_64.rootfs.cpio
-    expire_in: never
-  tags:
-    - runners-server
-    - shell
+      - artifacts/
 
-clean:
-  stage: prepare
+upload-rootfs:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  needs:
+    - job: build-rootfs
+  rules:
+    - if: $CI_COMMIT_BRANCH
+      changes:
+        - build/meta-rootfs/**/*
+        - build/meta-usr/**/*
+        - linux/rootfs/**/*
+        - .gitlab-ci.yml
   script:
-    - rm -rf $ROOTFS_PATH
-  when: manual
-  tags:
-    - runners-server
-    - shell
-  
+    - tar -czf rootfs.tar.gz artifacts/*
+    - GLAB_ENABLE_CI_AUTOLOGIN=true glab release create rootfs.v$CI_PIPELINE_IID --ref "$CI_COMMIT_SHA" --use-package-registry rootfs.tar.gz

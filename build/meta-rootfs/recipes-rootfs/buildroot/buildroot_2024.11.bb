@@ -128,6 +128,24 @@ buildroot_inputs_hash() {
 	} | sha256sum | cut -d' ' -f1
 }
 
+do_toolchain() {
+	bbnote "Getting buildroot toolchain..."
+
+	cd ${IB_TARGET}
+	make O=${IB_ROOTFS_PATH} BR2_EXTERNAL_DIRS=.. BR2_DL_DIR="${IB_BUILDROOT_DL_DIR}" --no-print-directory toolchain
+
+	# Recorded only after a successful make — a failed build must not be
+	# remembered as up to date — and re-hashed rather than reusing the value
+	# computed above, since the make may legitimately touch its own inputs
+	# (.config normalisation, for one).
+	buildroot_inputs_hash > "${IB_BUILDROOT_GUARD}"
+}
+addtask do_toolchain
+
+do_toolchain[depends] += "buildroot:do_configure"
+
+do_build[depends] += "buildroot:do_toolchain"
+
 do_build () {
 	bbnote "Building buildroot based rootfs..."
 

@@ -38,7 +38,7 @@ python () {
 }
 addtask do_attach_infrabase after do_patch before do_build
 
-do_build[depends] = "rootfs-linux:do_build"
+do_build[depends] += "rootfs-linux:do_attach_infrabase buildroot:do_toolchain"
 do_unpack[depends] += "linux:do_build"
 
 do_deploy[depends] = "rootfs-linux:do_deploy"

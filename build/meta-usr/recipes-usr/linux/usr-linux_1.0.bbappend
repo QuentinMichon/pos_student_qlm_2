@@ -8,19 +8,6 @@ inherit usr
 inherit linux
 inherit filesystem
 inherit rootfs
- 
-# This is a BUILD step, not a media deploy: it bakes the agency apps INTO
-# rootfs.cpio (rsync into the cpio tree, then re-pack). That single rootfs
-# image is then the source for both targets:
-#   - the embedded ramfs (gzip -> initrd.cpio.gz -> ITB) for
-#     IB_RAMFS_SOURCE="rootfs";
-#   - the p2 ext4 partition, which rootfs-linux:do_deploy populates by
-#     extracting this same (apps-included) rootfs.cpio at DEPLOY time.
-# So p2 gets the apps for free via the final rootfs.cpio — no separate
-# media write here. Depends on buildroot (rootfs.cpio) + usr:do_build
-# (the apps), NOT on rootfs-linux:do_deploy, so the build never touches
-# the boot media.
-do_deploy[depends] = "${IB_ROOTFS_METHOD}:do_build"
 
 python do_deploy() {
 
