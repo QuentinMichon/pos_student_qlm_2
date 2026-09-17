@@ -194,7 +194,7 @@ python do_deploy() {
 
 # do_itb runs in the BUILD chain only (it produces the .itb that deploy
 # consumes); deploy must not re-trigger it.
-addtask do_itb before do_deploy
+addtask do_itb before do_build
 addtask do_deploy
 
 do_deploy_boot[nostamp] = "1"

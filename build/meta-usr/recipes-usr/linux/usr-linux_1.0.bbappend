@@ -9,6 +9,8 @@ inherit linux
 inherit filesystem
 inherit rootfs
 
+do_deploy[depends] = ""
+
 python do_deploy() {
 
     import os
