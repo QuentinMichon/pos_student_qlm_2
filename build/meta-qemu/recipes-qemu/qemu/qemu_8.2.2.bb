@@ -25,10 +25,16 @@ IB_QEMU_PREBUILT_DIR = "${THISDIR}/files/prebuilt"
 
 require files/0001-${PF}-patches.inc
 
-# IB_QEMU_METHOD = "prebuilt": skip fetching/patching entirely (see comment above)
-do_fetch[noexec]  = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
-do_unpack[noexec] = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
-do_patch[noexec]  = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
+
+# IB_QEMU_METHOD = "prebuilt": skip fetching/patching/attaching entirely (see
+# comment above). do_attach_infrabase normally copies the freshly
+# fetched+patched ${S} into IB_TARGET, but with fetch/unpack/patch skipped
+# there is no ${S} to copy; do_build creates ${IB_DIR}/qemu/build itself when
+# installing the prebuilt binary, so skipping the attach is safe here.
+do_fetch[noexec]            = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
+do_unpack[noexec]           = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
+do_patch[noexec]            = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
+do_attach_infrabase[noexec] = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
 
 # Where the working directory will be placed in infrabase root dir
 IB_TARGET = "${IB_DIR}/qemu"
