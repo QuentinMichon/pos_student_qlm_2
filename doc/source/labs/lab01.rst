@@ -28,6 +28,23 @@ Le laboratoire doit être rendu avant le mardi 22.09.2026 23h59
 Récupération du code source
 ===========================
 
+Un dépots Gitlab hébergé sur REDS vous est fournis : 
+``https://reds-gitlab-2.reds-heig-vd.in/pos-26/<nom>_<prenom>``
+
+Commencer par créer votre dépots local et le relier au dépot de référence.
+
+   .. code-block:: console
+
+      # S'assurer d'etre sur la bonne branche
+      ~/pos25$ git clone https://reds-gitlab-2.reds-heig-vd.in/pos-26/<nom>_<prenom>
+      ~/pos25$ git remote add upstream https://reds-gitlab.heig-vd.ch/reds-public/pos_student.git
+      ~/pos25$ git fetch upstream
+      ~/pos25$ git merge upstream/main
+      ~/pos25$ git push origin main
+
+Votre ``push`` vas déclanché la pipeline de build du ``rootfs`` (sur Gitlab aller dans Build/Pipelines vous devriez voir ``setup Gitlab CI/cd for rootfs`` running).
+
+
 .. warning::
    Les laboratoires s'exécutent depuis une image *Docker* contenant tous les outils
    nécessaires (compilation, déploiement, exécution). Il est donc nécessaire d'avoir
@@ -38,7 +55,6 @@ si ce n'est pas déjà fait.
 
 .. code-block:: console
 
-   # S'assurer d'etre sur la bonne branche
    ~/pos25$ git switch main
    ~/pos25$ git switch -c lab01
    ~/pos25$ git push --set-upstream origin lab01
@@ -51,6 +67,14 @@ Lancer l'image Docker pour les prochaines étapes.
     Dès lors, ``build.sh``, ``deploy.sh``, ``st.sh`` et ``dbuild.sh`` peuvent être exécutés comme de
     simples commandes, depuis n'importe quel endroit de l'arborescence. À faire une seule fois par
     terminal.
+
+.. code-block:: console
+
+   ~/pos25$ . ./env.sh
+   ~/pos25$ dbuild.sh --build
+
+Attendre la fin de la CI/CD et récupérer l'artefact ``rootfs.cpio``. Le placer dans votre projet local dans 
+``build/meta-rootfs/recipes-rootfs/linux/files/board/<plat>``, ``<plat>`` dépend de la platforme choisie.
 
 Pour exécuter les prochaines commandes dans l'environnement Docker, utiliser ``dbuild.sh``
 avant chacune d'elles, ou lancer directement ``dbuild.sh`` sans argument.
