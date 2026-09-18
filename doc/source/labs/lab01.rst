@@ -35,7 +35,6 @@ Commencer par créer votre dépots local et le relier au dépot de référence.
 
    .. code-block:: console
 
-      # S'assurer d'etre sur la bonne branche
       ~/pos25$ git clone https://reds-gitlab-2.reds-heig-vd.in/pos-26/<nom>_<prenom>
       ~/pos25$ git remote add upstream https://reds-gitlab.heig-vd.ch/reds-public/pos_student.git
       ~/pos25$ git fetch upstream
@@ -55,6 +54,7 @@ si ce n'est pas déjà fait.
 
 .. code-block:: console
 
+   # S'assurer d'etre sur la bonne branche
    ~/pos25$ git switch main
    ~/pos25$ git switch -c lab01
    ~/pos25$ git push --set-upstream origin lab01
