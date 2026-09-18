@@ -41,13 +41,13 @@ Commencer par créer votre dépots local et le relier au dépot de référence.
       ~/pos25$ git merge upstream/main
       ~/pos25$ git push origin main
 
-Votre ``push`` vas déclanché la pipeline de build du ``rootfs`` (sur Gitlab aller dans Build/Pipelines vous devriez voir ``setup Gitlab CI/cd for rootfs`` running).
+Votre ``push`` vas déclanché la pipeline de build du ``rootfs`` (sur Gitlab aller dans Build/Pipelines).
 
 
 .. warning::
    Les laboratoires s'exécutent depuis une image *Docker* contenant tous les outils
-   nécessaires (compilation, déploiement, exécution). Il est donc nécessaire d'avoir
-   *Docker* installé sur votre machine.
+   nécessaires (compilation, déploiement, exécution). Il est donc **nécessaire d'avoir
+   *Docker* installé sur votre machine**.
 
 Créez une branche pour le lab01 à partir de la branche ``main``,
 si ce n'est pas déjà fait.
@@ -71,7 +71,7 @@ Lancer l'image Docker pour les prochaines étapes.
 .. code-block:: console
 
    ~/pos25$ . ./env.sh
-   ~/pos25$ dbuild.sh --build
+   ~/pos25$ dbuild.sh --build # Prends quelques minutes
 
 Attendre la fin de la CI/CD et récupérer l'artefact ``rootfs.cpio``. Le placer dans votre projet local dans 
 ``build/meta-rootfs/recipes-rootfs/linux/files/board/<plat>``, ``<plat>`` dépend de la platforme choisie.
@@ -149,7 +149,7 @@ Compilation de *Linux*
 .. warning::
     Vérifier votre nombre de coeur de votre processor et adapter la variable ``BB_NUMBER_THREADS`` de ``local.conf`` en fonction. Pensez à en laisser
     2 de libre pour le reste du système.
-    ``lscpu`` sous Linux et via le *gestionnaire des tâches* sous Windows.
+    Vous pouvez vérifier cela avec ``lscpu`` sous Linux et via le *gestionnaire des tâches* sous Windows.
 
 Cette étape consiste à compiler *Linux* pour l'environnement émulé *QEMU/virt*.
 Pour cela, suivez les étapes suivantes :
