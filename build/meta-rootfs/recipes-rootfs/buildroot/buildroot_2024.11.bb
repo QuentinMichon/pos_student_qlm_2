@@ -132,7 +132,7 @@ do_toolchain() {
 	bbnote "Getting buildroot toolchain..."
 
 	cd ${IB_TARGET}
-	make O=${IB_ROOTFS_PATH} BR2_EXTERNAL_DIRS=.. BR2_DL_DIR="${IB_BUILDROOT_DL_DIR}" --no-print-directory toolchain
+	make O=${IB_ROOTFS_PATH} BR2_DL_DIR="${IB_BUILDROOT_DL_DIR}" --no-print-directory toolchain
 
 	# Recorded only after a successful make — a failed build must not be
 	# remembered as up to date — and re-hashed rather than reusing the value
@@ -157,7 +157,7 @@ do_build () {
 	fi
 
 	cd ${IB_TARGET}
-	make  O=${IB_ROOTFS_PATH} BR2_EXTERNAL_DIRS=.. BR2_DL_DIR="${IB_BUILDROOT_DL_DIR}" --no-print-directory
+	make  O=${IB_ROOTFS_PATH} BR2_DL_DIR="${IB_BUILDROOT_DL_DIR}" --no-print-directory
 
 	# Recorded only after a successful make — a failed build must not be
 	# remembered as up to date — and re-hashed rather than reusing the value
