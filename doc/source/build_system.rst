@@ -40,9 +40,10 @@ Tree layout
    scripts/                build.sh, deploy.sh, st.sh, dbuild.sh, …
    docker/build-env/       the build container
    linux/                  Linux kernel, root filesystem (buildroot), user space
+     images/               the FIT image: <platform>.its and <platform>.itb
    so3/                    the SO3 operating system
    u-boot/  qemu/          fetched components, attached here
-   filesystem/             bootable output: sdcard.img.<platform>, <platform>.itb
+   filesystem/             bootable output: sdcard.img.<platform>
    labo/                   the lab handouts
    doc/                    this documentation
 
@@ -180,7 +181,7 @@ Deploying — ``deploy.sh``
    $ deploy.sh usr-linux          # only the user-space part
 
 Deployment is what produces something bootable. It builds the FIT image
-(``filesystem/<platform>.itb`` — kernel, device tree and initrd in a single file
+(``linux/images/<platform>.itb`` — kernel, device tree and initrd in a single file
 that U-Boot loads with ``bootm``), then mounts the storage image and copies
 everything into it.
 
