@@ -19,6 +19,7 @@
    getting_started
    container
    build_system
+   worktrees
    running
    troubleshooting
    vExpress_register_description
