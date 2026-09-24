@@ -29,6 +29,12 @@ do_build[depends] = "${IB_ROOTFS_METHOD}:do_build"
 # __do_rootfs_mount (missing rootfs.cpio) rather than silently rebuilding.
 do_deploy[depends] += "filesystem:do_fs_check"
 
+# usr-linux:do_deploy bakes the usr apps into rootfs.cpio (mounting the cpio
+# itself, not p2). Without this dependency nothing guarantees it runs before
+# the cp -av below, so p2 can end up with a rootfs.cpio snapshot taken before
+# the apps were injected.
+do_deploy[depends] += "usr-linux:do_deploy"
+
 do_build[nostamp] = "1"
 do_build () {
 
