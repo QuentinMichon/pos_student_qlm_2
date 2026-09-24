@@ -2,6 +2,11 @@ stages:
   - build
   - release
 
+variables:
+  IB_PLATFORM:
+    value: "virt32"
+    description: "Target platform to build (virt32, virt64, rpi4, rpi4_64, verdin-imx8mp). Override via 'Run pipeline' in the UI to build a different target."
+
 build-rootfs:
   timeout: 2h
   stage: build
@@ -16,9 +21,17 @@ build-rootfs:
     - when: manual
   script:
     - source env.sh
-    - IB_PLATFORM=virt32 build.sh rootfs-linux
-    - mkdir -p artifacts/virt32/images
-    - cp linux/rootfs/images/rootfs.cpio artifacts/virt32/images/rootfs.cpio
+    # The build reads the platform from local.conf only (an exported
+    # IB_PLATFORM is ignored): switch its active IB_PLATFORM line, as
+    # wt.sh add does, and fail if $IB_PLATFORM matched no line.
+    - |
+      sed -i -e 's/^IB_PLATFORM ?= /# IB_PLATFORM ?= /' \
+             -e "s/^# IB_PLATFORM ?= \"$IB_PLATFORM\"/IB_PLATFORM ?= \"$IB_PLATFORM\"/" \
+             build/conf/local.conf
+    - grep -qx "IB_PLATFORM ?= \"$IB_PLATFORM\"" build/conf/local.conf
+    - build.sh rootfs-linux
+    - mkdir -p artifacts/$IB_PLATFORM/images
+    - cp linux/rootfs/images/rootfs.cpio artifacts/$IB_PLATFORM/images/rootfs.cpio
   artifacts:
     paths:
       - artifacts/
