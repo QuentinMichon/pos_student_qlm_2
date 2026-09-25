@@ -35,9 +35,9 @@ do_build () {
 		mkdir -p ${IB_DIR}/qemu/build
 
 		# Every prebuilt binary, whatever the platform: st.sh picks the one it
-		# needs by name. Looking only under ${QEMU_TARGET} missed
-		# qemu-system-aarch64, which is stored under arm-softmmu/, so virt64
-		# could not run prebuilt at all.
+		# needs by name, and a binary filed under the wrong <target>-softmmu/
+		# (qemu-system-aarch64 sat under arm-softmmu/ until 2026-09-25) is
+		# still found.
 		cp ${IB_QEMU_PREBUILT_DIR}/*/qemu-system-* ${IB_DIR}/qemu/build/
 		return
 	fi
