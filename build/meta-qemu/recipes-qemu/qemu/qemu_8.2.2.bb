@@ -31,10 +31,14 @@ require files/0001-${PF}-patches.inc
 # fetched+patched ${S} into IB_TARGET, but with fetch/unpack/patch skipped
 # there is no ${S} to copy; do_build creates ${IB_DIR}/qemu/build itself when
 # installing the prebuilt binary, so skipping the attach is safe here.
-do_fetch[noexec]            = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
-do_unpack[noexec]           = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
-do_patch[noexec]            = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
-do_attach_infrabase[noexec] = "${@bb.utils.contains('IB_QEMU_METHOD', 'prebuilt', '1', '', d)}"
+#
+# Set from Python and only in prebuilt mode: a noexec flag set to anything but
+# "1" (an empty string in build mode) draws a BitBake warning (YP #13808).
+python () {
+    if d.getVar('IB_QEMU_METHOD') == "prebuilt":
+        for task in ("do_fetch", "do_unpack", "do_patch", "do_attach_infrabase"):
+            d.setVarFlag(task, 'noexec', '1')
+}
 
 # Where the working directory will be placed in infrabase root dir
 IB_TARGET = "${IB_DIR}/qemu"

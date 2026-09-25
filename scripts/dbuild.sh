@@ -119,6 +119,16 @@ fi
 
 set -- -e IB_TREE="$IB_ROOT" -e IB_CWD="$cwd" "$@"
 
+# Forward the per-invocation knobs env.sh lets through to bitbake
+# (BB_ENV_PASSTHROUGH_ADDITIONS) when they are set on the host. Without it
+# `IB_FORCE_ATTACH=1 dbuild.sh build.sh <recipe>` — what the attach guard
+# itself advises — never reached the container, and the guard kept refusing.
+
+for _v in IB_FORCE_ATTACH IB_PARTITION_LAYOUT; do
+	eval "_val=\${$_v:-}"
+	[ -n "$_val" ] && set -- -e "$_v=$_val" "$@"
+done
+
 # Hardware deployment: make any IB_HTTP_DEPLOY_PATH feed directory
 # visible at its own path so `deploy.sh` can publish into it from inside
 # (IB_STORAGE_MODE=http). The POS platforms use soft/hard storage, so
@@ -126,6 +136,11 @@ set -- -e IB_TREE="$IB_ROOT" -e IB_CWD="$cwd" "$@"
 # IB_STORAGE_MODE=hard needs no extra wiring: /dev is already
 # bind-mounted and the container is privileged (it writes the HOST's
 # device, so double-check IB_STORAGE_DEVICE).
+#
+# The DEFAULT feed lives inside the tree (IB_HTTP_DEPLOY_PATH in
+# local.conf), which is already bind-mounted, so this loop does nothing
+# for it. It only matters for a build/conf/site.conf that redirects the
+# feed out of the tree.
 #
 # A snap-packaged Docker cannot do this: the confined daemon only reaches
 # $HOME (and a few allowed paths), so bind-mounting e.g. /var/www/html
@@ -137,8 +152,27 @@ case "$(command -v docker)" in
 	/snap/*) _snap_docker=1 ;;
 esac
 
+# The client path is not proof either way: the docker snap also ships a
+# /usr/bin/docker wrapper, so a confined daemon can hide behind an
+# ordinary-looking binary. Ask the daemon itself — a snap daemon keeps
+# its root under /var/snap. Only worth doing when the path check missed.
+
+if [ "$_snap_docker" = "0" ]; then
+	case "$(docker info --format '{{.DockerRootDir}}' 2>/dev/null)" in
+		/var/snap/*|/snap/*) _snap_docker=1 ;;
+	esac
+fi
+
 for _feed in $(sed -n 's/^[[:space:]]*IB_HTTP_DEPLOY_PATH[^=]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
-		"$IB_ROOT/build/conf/local.conf" 2>/dev/null | sort -u); do
+		"$IB_ROOT/build/conf/local.conf" "$IB_ROOT/build/conf/site.conf" \
+		2>/dev/null | sort -u); do
+	# Tree-relative defaults are already inside the bind-mounted tree, and
+	# ${...} references are not expanded here — skip both.
+	case "$_feed" in
+		*'${'*)            continue ;;
+		"$IB_ROOT"|"$IB_ROOT"/*) continue ;;
+	esac
+
 	[ -d "$_feed" ] || continue
 
 	case "$_feed" in
@@ -217,4 +251,18 @@ set -- --rm \
 	-e TERM="${TERM:-xterm}" \
 	"$@"
 
-exec docker run "$@"
+docker run "$@"
+_rc=$?
+
+# The TEZI feed server has to run on the HOST: the container is --rm, so a
+# server started inside it dies with the command that started it. It shares
+# the host network namespace (--network host above), but not its lifetime.
+#
+# Run this after the container rather than before, so the very first
+# `dbuild.sh deploy.sh ...` — which creates the feed inside the container —
+# leaves a serving feed behind too. Idempotent, and a no-op when nothing has
+# been published yet or a server is already up.
+
+"$IB_ROOT/scripts/tezi-feed-serve.sh" --ensure
+
+exit $_rc

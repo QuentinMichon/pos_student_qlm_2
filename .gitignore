@@ -33,6 +33,12 @@
 # in silence — a new class simply never reaching the repository.
 !/build/meta/
 
+# Per-machine bitbake overrides (see build/meta/conf/bitbake.conf). The rules
+# just above re-include all of build/conf/, so this one file needs its own.
+# The TEZI feed published by deploy.sh lives in build/deploy/ (along with the
+# feed server's pid/log) and is already covered by the /build/* rule.
+/build/conf/site.conf
+
 # The rpi4 BSP deploys Broadcom's prebuilt bcm27xx device trees onto the boot
 # partition, alongside start4.elf & co. Unlike every other .dtb in the tree they
 # are vendored *inputs*, not build products, so the "*.dtb" rule above must not
