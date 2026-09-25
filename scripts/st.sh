@@ -40,11 +40,43 @@ N_QEMU_INSTANCES=`ps -A | grep qemu-system | wc -l`
 
 SENSE_HAT_PID=""
 
+SENSE_EMU_PIDFILE="/dev/shm/rpi-sense-emu-pid"
+
+# True when the python-sense-emu lock names a live emulator.
+#
+# The command line is read straight from /proc by builtins, with no child
+# process. The `ps -p $pid | grep -q sense_emu` this replaces matched ITSELF:
+# a fresh container hands out PIDs in the same order on every run, so the
+# grep of one run can land on the PID the previous run's GUI held, and grep's
+# own argv contains "sense_emu". The stale lock then passed for a live one,
+# and the next GUI refused to start ("Another process is currently acting as
+# the Sense HAT emulator"). A zombie is caught too: its cmdline is empty,
+# while the kill(pid, 0) python-sense-emu relies on still succeeds.
+sense_emu_lock_is_live() {
+    local _pid _argv=()
+    read -r _pid 2>/dev/null < "$SENSE_EMU_PIDFILE" || return 1
+    case "$_pid" in ''|*[!0-9]*) return 1 ;; esac
+    mapfile -d '' _argv 2>/dev/null < "/proc/$_pid/cmdline" || return 1
+    [[ "${_argv[*]}" == *sense_emu* ]]
+}
+
 # Kill the whole Sense HAT process group (server + sense_emu_gui + its sensor
 # helpers) when st.sh exits. The server is started via setsid, so its PID is
 # also its process-group id.
+#
+# A GUI killed by a signal never releases its lock, so release it here once
+# the GUI is gone, rather than leave the next run to guess whether the PID in
+# it still means anything: after a containerised run it names a process of a
+# namespace that no longer exists.
 cleanup_sense_hat() {
-    [ -n "$SENSE_HAT_PID" ] && kill -TERM -"$SENSE_HAT_PID" 2>/dev/null
+    [ -n "$SENSE_HAT_PID" ] || return
+    kill -TERM -"$SENSE_HAT_PID" 2>/dev/null
+    for _i in 1 2 3 4 5 6 7 8 9 10; do
+        sense_emu_lock_is_live || break
+        sleep 0.1
+    done
+    kill -KILL -"$SENSE_HAT_PID" 2>/dev/null
+    sense_emu_lock_is_live || rm -f /dev/shm/rpi-sense-emu-*
 }
 
 # Bring up the host-side Sense HAT emulator (sense_emu_gui + the TCP 4442
@@ -70,14 +102,18 @@ launch_sense_hat_gui() {
     #
     # So trust the PID only when it really is an emulator, and otherwise clear
     # the whole set: they are shared-memory artefacts, recreated at startup.
+    # A real one means another `st.sh -g` is up: it also holds TCP 4442, so
+    # say so here rather than let the GUI fail in a dialog box.
 
-    _pidfile="/dev/shm/rpi-sense-emu-pid"
-    if [ -f "$_pidfile" ]; then
-        _pid="$(cat "$_pidfile" 2>/dev/null)"
-        if ! ps -p "$_pid" -o args= 2>/dev/null | grep -q sense_emu; then
-            echo -e "\033[01;33m[sense-hat] stale emulator lock (pid ${_pid:-?} is not an emulator) — clearing\033[0;37m" >&2
-            rm -f /dev/shm/rpi-sense-emu-*
-        fi
+    if sense_emu_lock_is_live; then
+        read -r _pid < "$SENSE_EMU_PIDFILE"
+        echo -e "\033[01;31m[sense-hat] an emulator is already running (pid $_pid) — quit the other 'st.sh -g', or: kill $_pid\033[0;37m" >&2
+        exit 1
+    fi
+    if [ -e "$SENSE_EMU_PIDFILE" ]; then
+        read -r _pid 2>/dev/null < "$SENSE_EMU_PIDFILE"
+        echo -e "\033[01;33m[sense-hat] stale emulator lock (pid ${_pid:-?} is not an emulator) — clearing\033[0;37m" >&2
+        rm -f /dev/shm/rpi-sense-emu-*
     fi
 
     echo -e "\033[01;36m[sense-hat] launching emulator GUI + bridge (TCP 4442), log: $_log\033[0;37m"
