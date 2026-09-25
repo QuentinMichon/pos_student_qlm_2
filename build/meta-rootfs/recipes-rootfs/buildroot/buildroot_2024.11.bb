@@ -61,9 +61,9 @@ do_build[depends] += "rootfs-linux:do_attach_infrabase"
 # the whole target/ tree, recreates every systemd symlink and regenerates
 # rootfs.cpio. Measured at ~14 s of a ~23 s no-op `build.sh bsp-linux`.
 #
-# Worse than the time, that regeneration OVERWRITES rootfs.cpio, discarding what
-# usr-linux:do_deploy injected into it, so the whole mount/inject/repack cycle
-# has to run again behind it.
+# Worse than the time, that regeneration OVERWRITES rootfs.cpio, discarding
+# anything injected into it after the build (an e1c capsule bakes its usr apps
+# there), so any mount/inject/repack cycle has to run again behind it.
 #
 # So hash what buildroot actually consumes and skip the make when it is
 # unchanged:
