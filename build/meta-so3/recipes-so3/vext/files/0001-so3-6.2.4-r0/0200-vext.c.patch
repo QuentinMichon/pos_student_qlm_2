@@ -1,6 +1,7 @@
 --- /dev/null
 +++ b/so3/devices/vext.c
-@@ -0,0 +1,86 @@
+@@ -0,0 +1,87 @@
++/*
 + * Copyright (C) 2014-2020 Daniel Rossier <daniel.rossier@heig-vd.ch>
 + * Copyright (C) 2020 David Truan <david.truan@heig-vd.ch>
 + *
