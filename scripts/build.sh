@@ -2,9 +2,10 @@
 
 # General build script for the infrabase infrastructure.
 #
-# bitbake runs as the unprivileged user. The only build invocation that
-# needs root (the filesystem image creation, `-x filesystem`) still runs
-# bitbake unprivileged — its recipe calls `sudo -n` for the privileged ops
+# bitbake runs as the unprivileged user. The only build invocations that
+# need root (the filesystem image creation via `filesystem`, and bsp-linux
+# which loop-mounts the rootfs at build time) still run bitbake
+# unprivileged — the recipe calls `sudo -n` for the privileged ops
 # (losetup/fdisk/mkfs) via the sudo timestamp opened by
 # sudo_session_start.
 
@@ -171,8 +172,54 @@ then
 	bitbake $recipename -c clean $IB_BB_OPTS
 fi
 
+# Read the last uncommented assignment of a variable from local.conf. Handles
+# `VAR = "x"`, `VAR ?= "x"`, `VAR := "x"`; a later line (e.g. a CI append) wins.
+
+localconf_get()
+{
+	grep -E "^[[:space:]]*$1[[:space:]]*[?:]?=" build/conf/local.conf 2>/dev/null \
+		| tail -1 | awk -F'"' '{print $2}'
+}
+
+# On the QEMU-emulated platforms (virt32/virt64), a full BSP build should yield
+# a runnable emulator without a separate `build.sh qemu` step. Build QEMU here
+# when its binary is still missing — a bootstrap only: an already-built emulator
+# is left untouched, so the inner build loop pays nothing and the qemu-hacking
+# loop stays the explicit `build.sh -x qemu`. Hardware platforms (verdin, rpi4)
+# never run under QEMU, so they are skipped. Opt out with IB_BUILD_QEMU="0"
+# (e.g. CI that only builds+deploys and never runs the emulator).
+
+maybe_bootstrap_qemu()
+{
+	case "$1" in
+		bsp-linux) ;;
+		*) return 0 ;;
+	esac
+
+	if test "$(localconf_get IB_BUILD_QEMU)" = "0"
+	then
+		return 0
+	fi
+
+	case "$(localconf_get IB_PLATFORM)" in
+		virt64) _qbin="qemu-system-aarch64" ;;
+		virt32) _qbin="qemu-system-arm" ;;
+		*)      return 0 ;;
+	esac
+
+	if test ! -x "$IB_ROOT_DIR/qemu/build/$_qbin"
+	then
+		printf "\n[infrabase] %s: the QEMU emulator (%s) is not built yet — building it first.\n" \
+			"$1" "$_qbin"
+		printf "            (set IB_BUILD_QEMU=\"0\" in build/conf/local.conf to skip this.)\n\n"
+		bitbake qemu $IB_BB_OPTS || exit 1
+	fi
+}
+
 if test $dobuild -eq 1
 then
+	maybe_bootstrap_qemu "$recipename"
+
 	if test $rootprivs -eq 1
 	then
 		printf "\n *** NOTE: *** '$recipename' invokes privileged tools\n"
