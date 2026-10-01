@@ -16,67 +16,6 @@ nouveaux périphériques. Ce laboratoire propose de rajouter l'émulation du pé
 contrôleur LED ainsi que les interactions avec l'interface graphique (GUI) *Sense-HAT* développée
 en *Python*.
 
-Egalement, une première compilation de *buildroot* sera faite pour prendre en main l'outil.
-
-****Echéance****
-
-Le laboratoire doit être rendu avant le mardi 05.10.2026 23h59
-
-Création de la nouvelle branche
-===============================
-
-Si nécessaire, corriger les commentaires de l'assistant sur la merge request du laboratoire précédent
-et informer l'assistant une fois fait. Seules les erreurs qui peuvent poser problèmes pour la suite
-sont à corriger, ils ont la mention *A corriger*. Mais il peut y avoir d'autres commentaires
-à prendre en compte dont la correction peut être faite sur la branche du nouveau laboratoire.
-
-Créer la nouvelle branche pour le laboratoire. Si la branche du laboratoire précédent n'a pas encore été
-merge (modification à faire valider), repartir de celle-ci pour créer la nouvelle branche.
-
-.. code-block:: console
-
-   # S'assurer d'etre a jour avec dev
-   ~/pos25$ git switch dev
-   ~/pos25$ git pull
-   ~/pos25$ git switch -c lab03
-   ~/pos25$ git push --set-upstream origin lab03
-
-Compilation de *buildroot*
-==========================
-
-La compilation de *buildroot* prenant du temps non négligeable, commencer par lancer celle-ci en arrière-plan
-le temps de faire les étapes suivantes. Les commandes suivantes doivent être effectuées depuis *Docker*.
-
-*buildroot* ayant besoin des sources pour les différents packages compilés, il va automatiquement
-aller les télécharger. L'URL utilisé par défaut pour les sources GNU n'est pas des plus rapides (~20ko/s).
-Il est possible de modifier celui-ci via ``menuconfig`` dans le menu *Build Options > Mirros and Download locations*
-et l'option *GNU Software mirror*. Plusieurs miroirs (copie des sources) existent à travers le monde,
-mais l'URL http://ftpmirror.gnu.org permet de sélectionner l'une d'elle automatiquement.
-Plus d'informations sont disponibles ici https://www.gnu.org/prep/ftp.html.
-
-Au lieu d'utiliser l'option ``-j`` de ``make``, *buildroot* à son propre paramètre pour la compilation
-sur plusieurs threads. Par défaut, il va automatiquement utiliser tous les threads disponibles pour compiler les packages
-et donc avoir de temps à autre un impact sur l'utilisation de l'ordinateur.
-Pour limiter cela, il est possible de modifier l'option *Number of jobs to run simultaneously*,
-dans le menu *Build options* de ``menuconfig``. L'idéal serait donc de modifier cette valeur pour laisser
-2 libres pour le reste du système.
-
-Les commandes suivantes permettent de lancer la compilation de *buildroot* :
-
-.. code-block:: console
-
-   ~/pos25$ cd rootfs.src
-   ~/pos25/rootfs.src$ make virt32_defconfig
-
-   # Modifier le miroir des sources et le nombre de jobs simultanes
-   ~/pos25/rootfs.src$ make menuconfig
-
-   # Ne pas utiliser l'otion -j
-   ~/pos25/rootfs.src$ make
-
-Garder le terminal ouvert et passer à létape suivante avec un nouveau terminal Docker.
-En cas de problème, il est possible de relancer la compilation simplement avec ``make``.
-
 Développement des accès aux LEDs sur *vExt*
 ===========================================
 Nous allons maintenant implémenter les fonctionnalitées de *vExt*. La première étape est de compiler *QEMU* en mode ``build``. 
@@ -111,49 +50,82 @@ afin de gérer l'accès aux LEDs.
 Ajout de ``vim``/``nano`` dans *Buildroot*
 ==========================================
 
-Une fois que la compilation de *buildroot* lancée à l'étape 2, est terminée, le résultat de la compilation
-est le fichier ``board/virt32/rootfs.cpio`` du dossier ``rootfs.src``.
-Pour pouvoir le déployer dans le disque virtuel, il faut le copier au même emplacement dans le dossier ``rootfs``.
-Ensuite, il suffit de déployer le *rootfs* comme habituellement.
+*buildroot* est géré par la recette ``buildroot`` d'*Infrabase* :
+
+* les sources de *buildroot* se trouvent dans ``linux/rootfs/buildroot`` ;
+* le dossier de compilation (``.config``, ``build/``, ``images/``, ...) est ``linux/rootfs`` ;
+* le *rootfs* déployé est le fichier ``build/meta-rootfs/recipes-rootfs/linux/files/board/virt32/rootfs.cpio``,
+  récupéré depuis la CI/CD au lab01.
+
+Commencer par déployer le *rootfs* actuel et lancer la simulation :
 
 .. code-block:: console
 
-   ~/pos25$ cp rootfs.src/board/virt32/rootfs.cpio rootfs/board/virt32/rootfs.cpio
-   ~/pos25$ ./deploy.sh -r
+   ~/pos25$ dbuild.sh deploy.sh rootfs-linux
+   ~/pos25$ dbuild.sh st.sh
 
-Lancer la simulation et vérifier que *Linux* se lance correctement et que les utilitaires habituels soit présent
-et fonctionnel (``ls``, ``cd``, ...). Vérifier également que ni ``vim`` et ni ``nano`` n'existe déjà
+Vérifier que *Linux* se lance correctement et que les utilitaires habituels soient présents
+et fonctionnels (``ls``, ``cd``, ...). Vérifier également que ni ``vim`` ni ``nano`` n'existent déjà
 dans l'image en essayant de les exécuter.
 
-Une fois les vérifications précédentes faites, activer les paquets pour ``vim`` et ``nano``
-dans *buildroot* à l'aide de ``menuconfig`` (depuis le dossier ``rootfs.src``).
+Une fois les vérifications précédentes faites, rechercher les paquets ``vim`` et ``nano``
+dans *buildroot* à l'aide de ``menuconfig``, depuis un shell *Docker* (``dbuild.sh`` sans argument) :
+
+.. code-block:: console
+
+   ~/pos25$ dbuild.sh
+   $ cd linux/rootfs
+   $ make menuconfig
 
 * Inspirez-vous du nom de la configuration du paquet montré dans le cours pour les trouver.
 
-Ensuite, recompiler *buildroot* pour ajouter les deux nouveaux paquets et déployer dans l'image.
+.. important::
+   Le ``.config`` de ``linux/rootfs`` n'est qu'une copie de travail : il est régénéré depuis
+   ``configs/virt32_defconfig`` à chaque reconfiguration de la recette. Les modifications faites
+   uniquement dans ``menuconfig`` seront donc perdues. Il faut les reporter dans le *defconfig*.
+
+Ajouter les deux options trouvées (``BR2_PACKAGE_...=y``) à la fin du fichier
+``linux/rootfs/buildroot/configs/virt32_defconfig``. Ce fichier est volontairement minimal
+(seulement les options sélectionnées), il ne faut **pas** le remplacer par le ``.config``.
+
+Les sources de *buildroot* ne font pas partie du dépôt : le *defconfig* y est stocké sous forme de *patch*
+(``build/meta-rootfs/recipes-rootfs/buildroot/files/0001-buildroot-2024.11-r0/0002-virt32_defconfig.patch``).
+Régénérer ce *patch* puis vérifier que seules vos deux lignes ont été ajoutées :
 
 .. code-block:: console
 
-   ~/pos25/rootfs.src$ make
+   ~/pos25$ dbuild.sh updiff.sh buildroot
 
-   ~/pos25$ cp rootfs.src/board/virt32/rootfs.cpio rootfs/board/virt32/rootfs.cpio
-   ~/pos25$ ./deploy.sh -r
+Il faut ensuite produire un nouveau ``rootfs.cpio`` contenant les deux paquets. Deux possibilités :
 
-Lancer la simulation et vérifier que les deux utilitaires soient bien présents.
+* **Via la CI/CD (recommandé)** : *commit* le *patch* et *push*. La modification
+  sous ``build/meta-rootfs`` déclenche la pipeline (*Build > Pipelines* sur GitLab), qui publie une
+  nouvelle *release* ``rootfs.v<N>``. Récupérer le ``rootfs.cpio`` de l'archive et le placer,
+  comme au lab01, dans ``build/meta-rootfs/recipes-rootfs/linux/files/board/virt32/``.
+* **En local** (compilation complète de *buildroot*, compter un temps non négligeable) :
 
-Finalement, copier le fichier ``.config`` dans ``configs/virt32_defconfig`` dans le dossier ``rootfs.src``
-pour pouvoir commit les changements.
+  .. code-block:: console
 
-Questions sur *buildroot*
-=========================
+     ~/pos25$ dbuild.sh build.sh rootfs-linux
+     ~/pos25$ cp linux/rootfs/images/rootfs.cpio build/meta-rootfs/recipes-rootfs/linux/files/board/virt32/rootfs.cpio
 
-A l'aide des informations vu en cours, retrouver les dépendances des paquets ``vim``, ``nano`` et
-``python3`` dans *buildroot*. Indiquer les dans le fichier ``lab03.md`` à la racine du repo (à créer).
+  .. warning::
+     La copie est obligatoire : à chaque *build* ou *deploy*, le fichier ``rootfs.cpio`` de
+     ``files/board/virt32`` est recopié dans le dossier de travail et écrase celui compilé.
+     Sans elle, l'ancien *rootfs* (sans ``vim`` ni ``nano``) serait déployé.
 
-Sans rentrer dans les détails, lister les patches appliquer à ces trois paquets dans ``lab03.md``.
+Déployer le nouveau *rootfs* et lancer la simulation :
 
-* Pour information, l'environnement utilisé utilise le dossier ``buildroot``
-    à la racine de repos comme dossier de base pour la compilation.
+.. code-block:: console
+
+   ~/pos25$ dbuild.sh deploy.sh rootfs-linux
+   ~/pos25$ dbuild.sh st.sh
+
+Vérifier que les deux utilitaires sont bien présents.
+
+.. note::
+   Seul le *patch* ``0002-virt32_defconfig.patch`` doit être *commit*. Ne pas *commit* le ``.config``
+   ni le fichier ``rootfs.cpio`` (fichier binaire, qui relancerait en plus la CI/CD à chaque *push*).
 
 Rendu du laboratoire
 ====================
