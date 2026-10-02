@@ -22,6 +22,7 @@ SRCREV = "8f77e03530f65209a377d25023e912b288e039cd"
 FILESPATH:prepend = "${THISDIR}/files/0001-${PF}:"
  
 require files/0001-${PF}-patches.inc
+require linux-deploy.inc
 
 # The fork's Makefile patch pins ARCH ?= arm64 (weak): right for rpi4_64,
 # overridden from the command line for the 32-bit rpi4 — same scheme as
