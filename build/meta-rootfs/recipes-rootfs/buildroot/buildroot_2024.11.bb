@@ -128,17 +128,34 @@ buildroot_inputs_hash() {
 	} | sha256sum | cut -d' ' -f1
 }
 
+# Provided rootfs (course CI). The rootfs is built by the GitLab CI and the
+# students drop the published rootfs.cpio into the git-ignored
+# files/board/<plat>/ of the rootfs-linux recipe, from where
+# rootfs-linux:do_attach_infrabase copies it into the board working copy. The
+# user space only needs buildroot's cross toolchain (usr-linux depends on
+# do_toolchain, not on do_build), so a full buildroot build is skipped as long
+# as that provided rootfs.cpio still matches the buildroot inputs.
+#
+# "Matches" means: the inputs are the ones the toolchain was built from,
+# recorded below in IB_BUILDROOT_PROVIDED_BASE. Once the buildroot
+# configuration changes (lab03 adds packages), the provided rootfs.cpio is
+# stale and do_build runs the full make again. This record is kept apart from
+# IB_BUILDROOT_GUARD, which only ever vouches for a rootfs this recipe built.
+#
+# `build.sh -c buildroot` leaves IB_BUILDROOT_FORCE behind, so the rebuild it
+# asks for is not skipped in favour of the provided rootfs.cpio.
+IB_BUILDROOT_PROVIDED = "${IB_BUILDROOT_SRC_BOARD}/${IB_PLATFORM}/rootfs.cpio"
+IB_BUILDROOT_PROVIDED_BASE = "${WORKDIR}/buildroot_toolchain_inputs.sha256"
+IB_BUILDROOT_FORCE = "${WORKDIR}/buildroot_force_rebuild"
+
 do_toolchain() {
 	bbnote "Getting buildroot toolchain..."
 
 	cd ${IB_TARGET}
 	make O=${IB_ROOTFS_PATH} BR2_DL_DIR="${IB_BUILDROOT_DL_DIR}" --no-print-directory toolchain
 
-	# Recorded only after a successful make — a failed build must not be
-	# remembered as up to date — and re-hashed rather than reusing the value
-	# computed above, since the make may legitimately touch its own inputs
-	# (.config normalisation, for one).
-	buildroot_inputs_hash > "${IB_BUILDROOT_GUARD}"
+	# The inputs a provided rootfs.cpio is taken to match (see above).
+	buildroot_inputs_hash > "${IB_BUILDROOT_PROVIDED_BASE}"
 }
 addtask do_toolchain
 
@@ -156,6 +173,13 @@ do_build () {
 		return 0
 	fi
 
+	if [ ! -f "${IB_BUILDROOT_FORCE}" ] && [ -f "${IB_BUILDROOT_PROVIDED}" ] && \
+	   [ -f "${IB_BUILDROOT_PROVIDED_BASE}" ] && \
+	   [ "$(cat ${IB_BUILDROOT_PROVIDED_BASE})" = "$(buildroot_inputs_hash)" ]; then
+		bbplain "buildroot: using the provided ${IB_BUILDROOT_PROVIDED} (CI), buildroot not rebuilt (build.sh -c buildroot forces it)"
+		return 0
+	fi
+
 	cd ${IB_TARGET}
 	make  O=${IB_ROOTFS_PATH} BR2_DL_DIR="${IB_BUILDROOT_DL_DIR}" --no-print-directory
 
@@ -164,6 +188,7 @@ do_build () {
 	# computed above, since the make may legitimately touch its own inputs
 	# (.config normalisation, for one).
 	buildroot_inputs_hash > "${IB_BUILDROOT_GUARD}"
+	rm -f "${IB_BUILDROOT_FORCE}"
 }
 
 do_clean[nostamp] = "1"
@@ -184,6 +209,12 @@ do_clean () {
 	# does NOT delete board/<plat>/rootfs.cpio, so a surviving guard would
 	# make the next build skip a make that has everything left to redo.
 	rm -f ${IB_BUILDROOT_GUARD}
+
+	# Likewise the provided-rootfs record, and ask the next build for a real
+	# make rather than falling back on a provided rootfs.cpio.
+	rm -f ${IB_BUILDROOT_PROVIDED_BASE}
+	mkdir -p ${WORKDIR}
+	touch ${IB_BUILDROOT_FORCE}
 }
 addtask do_clean
 

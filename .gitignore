@@ -164,6 +164,10 @@ so3/so3/scripts/kconfig/zconf.tab.c
 # .backup is a distinct suffix from .back: the rootfs pipeline leaves
 # board/<plat>/rootfs.cpio.backup behind on every build.
 *.backup
+# The rootfs.cpio published by the CI (or copied from a local buildroot
+# build) is dropped here by hand; committing it would ship a binary and
+# start the rootfs pipeline, whose build then skips buildroot and fails.
+/build/meta-rootfs/recipes-rootfs/linux/files/board/*/rootfs.cpio
 # patch/quilt reject & backup files (e.g. do_updiff regeneration leftovers)
 *.orig
 *.rej
