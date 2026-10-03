@@ -128,22 +128,10 @@ buildroot_inputs_hash() {
 	} | sha256sum | cut -d' ' -f1
 }
 
-# Provided rootfs (course CI). The rootfs is built by the GitLab CI and the
-# students drop the published rootfs.cpio into the git-ignored
-# files/board/<plat>/ of the rootfs-linux recipe, from where
-# rootfs-linux:do_attach_infrabase copies it into the board working copy. The
-# user space only needs buildroot's cross toolchain (usr-linux depends on
-# do_toolchain, not on do_build), so a full buildroot build is skipped as long
-# as that provided rootfs.cpio still matches the buildroot inputs.
-#
-# "Matches" means: the inputs are the ones the toolchain was built from,
-# recorded below in IB_BUILDROOT_PROVIDED_BASE. Once the buildroot
-# configuration changes (lab03 adds packages), the provided rootfs.cpio is
-# stale and do_build runs the full make again. This record is kept apart from
-# IB_BUILDROOT_GUARD, which only ever vouches for a rootfs this recipe built.
-#
-# `build.sh -c buildroot` leaves IB_BUILDROOT_FORCE behind, so the rebuild it
-# asks for is not skipped in favour of the provided rootfs.cpio.
+# A rootfs.cpio provided by the course CI (files/board/<plat>/ of rootfs-linux)
+# stands in for a buildroot build while the inputs are still the ones the
+# toolchain was built from. `build.sh -c buildroot` forces the make.
+
 IB_BUILDROOT_PROVIDED = "${IB_BUILDROOT_SRC_BOARD}/${IB_PLATFORM}/rootfs.cpio"
 IB_BUILDROOT_PROVIDED_BASE = "${WORKDIR}/buildroot_toolchain_inputs.sha256"
 IB_BUILDROOT_FORCE = "${WORKDIR}/buildroot_force_rebuild"
@@ -154,7 +142,6 @@ do_toolchain() {
 	cd ${IB_TARGET}
 	make O=${IB_ROOTFS_PATH} BR2_DL_DIR="${IB_BUILDROOT_DL_DIR}" --no-print-directory toolchain
 
-	# The inputs a provided rootfs.cpio is taken to match (see above).
 	buildroot_inputs_hash > "${IB_BUILDROOT_PROVIDED_BASE}"
 }
 addtask do_toolchain
@@ -210,8 +197,8 @@ do_clean () {
 	# make the next build skip a make that has everything left to redo.
 	rm -f ${IB_BUILDROOT_GUARD}
 
-	# Likewise the provided-rootfs record, and ask the next build for a real
-	# make rather than falling back on a provided rootfs.cpio.
+	# The next build runs a real make, even with a provided rootfs.cpio.
+
 	rm -f ${IB_BUILDROOT_PROVIDED_BASE}
 	mkdir -p ${WORKDIR}
 	touch ${IB_BUILDROOT_FORCE}
