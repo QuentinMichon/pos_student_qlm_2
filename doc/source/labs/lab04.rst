@@ -15,29 +15,6 @@ Le but de ce laboratoire est d'implémenter l'émulation des *switch* de l'exten
 L'appui sur un *switch* doit générer une interruption qui sera traitée ultérieurement par le *driver*.
 Dans ce laboratoire, il sera possible de valider le bon fonctionnement de l'interruption en consultant la valeur des registres concernés.
 
-****Echéance****
-
-Le laboratoire doit être rendu avant le vendredi 16.10.2026 23h59
-
-Création de la nouvelle branche
-===============================
-
-Si nécessaire, corriger les commentaires de l'assistant sur la merge request du laboratoire précédent
-et informer l'assistant une fois fait. Seules les erreurs qui peuvent poser problèmes pour la suite
-sont à corriger, ils ont la mention *A corriger*. Mais il peut y avoir d'autres commentaires
-à prendre en compte dont la correction peut être faite sur la branche du nouveau laboratoire.
-
-Créer la nouvelle branche pour le laboratoire. Si la branche du laboratoire précédent n'a pas encore été
-merge (modification à faire valider), repartir de celle-ci pour créer la nouvelle branche.
-
-.. code-block:: console
-
-   # S'assurer d'etre a jour avec dev
-   ~/pos25$ git switch dev
-   ~/pos25$ git pull
-   ~/pos25$ git switch -c lab04
-   ~/pos25$ git push --set-upstream origin lab04
-
 Amélioration de la lecture/écriture des registres
 =================================================
 
