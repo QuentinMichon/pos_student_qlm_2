@@ -1,11 +1,7 @@
-.. _vexpress_register_description:
+.. _virt32_register_description:
 
-================================================
-vExpress extension (vExt) - Register description
-================================================
-
-Transcription du document *vExpress extension (vExt) - Register description* (2022_4),
-``20220301_4_vExpress_extension_registers.pdf``.
+virt extension (vExt) - Register description
+============================================
 
 Sense hat emulation layout
 ==========================

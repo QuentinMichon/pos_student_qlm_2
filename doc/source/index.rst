@@ -22,7 +22,7 @@
    worktrees
    running
    troubleshooting
-   vExpress_register_description
+   virt_register_description
    vExt_json_api
 
 .. toctree::
