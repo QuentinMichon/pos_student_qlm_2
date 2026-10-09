@@ -181,6 +181,18 @@ do_toolchain[depends] += "buildroot:do_configure"
 
 do_build[depends] += "buildroot:do_toolchain"
 
+# For convenience, images/ also shows the platform's static initrd.cpio next
+# to rootfs.cpio. The link targets the git-tracked source, the file that
+# mount.sh -i / umount.sh -i edit and the next build embeds, so it is never
+# stale. It goes away with images/.
+
+buildroot_link_initrd() {
+	if [ -f ${IB_BUILDROOT_SRC_BOARD}/${IB_PLATFORM}/initrd.cpio ]; then
+		ln -sfnr ${IB_BUILDROOT_SRC_BOARD}/${IB_PLATFORM}/initrd.cpio \
+			${IB_ROOTFS_PATH}/images/initrd.cpio
+	fi
+}
+
 do_build () {
 	bbnote "Building buildroot based rootfs..."
 
@@ -200,6 +212,8 @@ do_build () {
 
 	cd ${IB_TARGET}
 	make  O=${IB_ROOTFS_PATH} BR2_DL_DIR="${IB_BUILDROOT_DL_DIR}" --no-print-directory
+
+	buildroot_link_initrd
 
 	# Recorded only after a successful make — a failed build must not be
 	# remembered as up to date — and re-hashed rather than reusing the value
