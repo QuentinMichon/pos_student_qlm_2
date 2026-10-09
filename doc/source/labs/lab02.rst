@@ -154,7 +154,9 @@ Cette étape permet d'effectuer un accès I/O simple vers les LEDs de *vext*.
   * Consulter la :ref:`description des registres de l'extension vExt
     <vexpress_register_description>` pour obtenir les informations nécessaires sur
     le pilotage des LEDs.
-  * Il faut utiliser des accès en *word*, sinon le périphérique ne répond pas.
+   * Les registres de *vExt* font 16 bits : utiliser ``mw.w`` / ``md.w``
+    (accès 16 bits, *word* au sens d'U-Boot). Les accès 8 bits (``.b``) sont
+    ignorés par le périphérique.
 
 Accès I/O sur une LED depuis *Linux*
 ====================================
