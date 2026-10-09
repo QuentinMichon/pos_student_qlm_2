@@ -38,7 +38,7 @@ messages sont échangés sur une socket TCP, en local, sur la machine exécutant
 
 Le périphérique *vExt* (côté *QEMU*) relaie ainsi les LEDs, *Switch*, *Sensors* et
 *Gyroscope* vers/depuis le GIC et le CPU (l'*IRQ* de *vExt* est l'*IRQ* 50, voir
-:ref:`vexpress_register_description`).
+:ref:`virt32_register_description`).
 
 Format des messages
 --------------------
