@@ -20,6 +20,7 @@ do_configure[depends] = "${IB_ROOTFS_METHOD}:do_configure"
 do_configure[noexec] = "1"
 
 do_build[depends] = "${IB_ROOTFS_METHOD}:do_build"
+do_build[depends] += "linux:do_build"
 
 # do_deploy is a pure DEPLOY step: it extracts the already-built rootfs.cpio
 # onto p2 (usr apps already inside when IB_RAMFS_SOURCE = "rootfs", copied
