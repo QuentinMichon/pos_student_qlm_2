@@ -122,6 +122,7 @@ Cette étape permet d'effectuer un accès I/O simple vers les LEDs de *vext*.
 #. **Démarrer l'émulateur graphique**, dans un **nouveau terminal**, sur la machine hôte :
 
     .. code-block:: console
+
        [PC] ~/pos25$ dbuild.sh
        [PC] ~/pos25$ . build/tmp/sense-hat-emu/venv/bin/activate
        [PC] ~/pos25$ python3 sense-hat/sense-hat-server.py
@@ -152,9 +153,9 @@ Cette étape permet d'effectuer un accès I/O simple vers les LEDs de *vext*.
     (utiliser ``help`` pour obtenir des informations sur les commandes de *U-Boot*).
 
   * Consulter la :ref:`description des registres de l'extension vExt
-    <vexpress_register_description>` pour obtenir les informations nécessaires sur
+    <virt32_register_description>` pour obtenir les informations nécessaires sur
     le pilotage des LEDs.
-   * Les registres de *vExt* font 16 bits : utiliser ``mw.w`` / ``md.w``
+  * Les registres de *vExt* font 16 bits : utiliser ``mw.w`` / ``md.w``
     (accès 16 bits, *word* au sens d'U-Boot). Les accès 8 bits (``.b``) sont
     ignorés par le périphérique.
 
@@ -169,7 +170,7 @@ Cette étape permet d'effectuer un accès I/O simple vers les LEDs de *vext* dep
 
 #. Editer le fichier ``linux/usr/src/modules/access.c`` et compléter la fonction
    d'initialisation ``access_init()`` afin que celle-ci allume les LEDs "LED0-LED2-LED4"
-   (selon la :ref:`description des registres de l'extension vExt <vexpress_register_description>`).
+   (selon la :ref:`description des registres de l'extension vExt <virt32_register_description>`).
 #. Compléter la fonction de sortie ``access_exit()`` qui éteindra les LEDs allumées.
 #. **Regénérer les fichiers** de ``usr/`` :
 
