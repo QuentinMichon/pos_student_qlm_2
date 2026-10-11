@@ -92,8 +92,16 @@ au périphérique *vExt*.
 
        ~/pos25/linux/linux$ make dtbs
 
-#. Editer le module ``linux/usr/module/access.c`` afin de gérer un modèle de type plateforme avec une fonction
+#. Editer le module ``linux/usr/src/modules/access.c`` afin de gérer un modèle de type plateforme avec une fonction
     ``probe()``. Cette dernière devra allumer les mêmes LEDs que la version précédente du module.
+
+  * Le nœud du *device-tree* qui a provoqué le *matching* est disponible dans ``pdev->dev.of_node`` :
+      il n'est pas nécessaire de le rechercher dans l'arbre (``of_find_node_by_name()``).
+  * En cas d'erreur (propriété absente, ressource manquante), ``probe()`` retourne un code
+      d'erreur négatif (``-ENODEV``, ``-EINVAL``, ``-ENOMEM``, …), si possible via ``dev_err_probe()``.
+      Ne pas utiliser ``BUG_ON()`` ou ``BUG()`` : un *driver* ne doit pas faire planter le noyau.
+  * Utiliser les fonctions *managées* ``devm_kzalloc()`` et ``devm_platform_ioremap_resource()`` :
+      les ressources sont libérées automatiquement par le noyau au retrait du *driver*.
 #. Tester le fonctionnement du module en veillant que la fonction ``probe()`` soit bien exécutée.
     Ne pas oublier de déployer le *device-tree* avec ``./deploy -b``.
 
@@ -103,21 +111,24 @@ Implémentation d'un traitement immédiat pour les *switches*
 L'appui sur un *switch* déclenche une interruption (*IRQ*). Il s'agit d'implémenter le traitement immédiat qui sera chargé
 d'acquitter l'interruption et de récupérer le numéro du *switch* appuyé.
 
-* La ligne d'interruption dédiée à *vExt* est de type *SPI* (*Shared Processor Interrupt*).
+* La ligne d'interruption dédiée à *vExt* est de type *SPI* (*Shared Peripheral Interrupt*).
 
 #. Ouvrir le document de *bindings* lié au contrôleur d'interruption (GIC)
     et trouver la signification des trois cellules de la propriété ``interrupts``.
 
   * Le fichier de *bindings* est le suivant
-       {``linux/linux/Documentation/devicetree /bindings/interrupt-controller/arm,gic.yaml``}
-  * Pour rappel, l'interruption est de type *niveau* (*actif haut*) et son numéro de ligne est 50.
+       {``linux/linux/Documentation/devicetree/bindings/interrupt-controller/arm,gic.yaml``}
+  * Pour rappel, l'interruption est de type *niveau* (*actif haut*) et son numéro de SPI est 13 (soit l'INTID 45 du GIC).
 
 #. Editer le *device-tree* de la plate-forme *virt32* et rajouter la propriété permettant de définir les informations liées à l'interruption.
 #. Editer le module et rajouter le traitement immédiat qui sera exécuté à la réception d'une interruption. La fonction de traitement affichera
     le numéro du *switch* pressé (de 1 à 5).
 
+  * Le numéro d'IRQ s'obtient avec ``platform_get_irq()`` ; c'est un numéro *Linux* (pas l'INTID du GIC),
+      et une valeur négative signale une erreur à retourner telle quelle.
   * L'interruption générée étant de type *niveau*, l'argument ``flags`` de ``request_irq()``
       doit être mis à ``IRQF_TRIGGER_HIGH``.
+  * Préférer ``devm_request_irq()`` (ou ``devm_request_threaded_irq()``), libérée automatiquement au retrait du *driver*.
   * Le fichier ``include`` à rajouter est le suivant :
 
       .. code-block:: c
