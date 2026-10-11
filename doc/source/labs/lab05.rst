@@ -86,11 +86,11 @@ au périphérique *vExt*.
       et les deux suivantes à la taille sur 64 bits.
   * Ce noeud peut être placé directement au-dessus de celui intitulé ``psci``
 
-#. La recompilation du *device-tree* s'effectue avec la commande suivante, à la racine de l'arborescence de Linux :
+#. Le *device-tree* est recompilé avec le noyau, puis placé dans l'image ITB, par la recette ``bsp-linux`` :
 
     .. code-block:: console
 
-       ~/pos25/linux/linux$ make dtbs
+       ~/pos25$ dbuild.sh build.sh bsp-linux
 
 #. Editer le module ``linux/usr/src/modules/access.c`` afin de gérer un modèle de type plateforme avec une fonction
     ``probe()``. Cette dernière devra allumer les mêmes LEDs que la version précédente du module.
@@ -103,7 +103,7 @@ au périphérique *vExt*.
   * Utiliser les fonctions *managées* ``devm_kzalloc()`` et ``devm_platform_ioremap_resource()`` :
       les ressources sont libérées automatiquement par le noyau au retrait du *driver*.
 #. Tester le fonctionnement du module en veillant que la fonction ``probe()`` soit bien exécutée.
-    Ne pas oublier de déployer le *device-tree* avec ``./deploy -b``.
+    Ne pas oublier de déployer le nouveau *device-tree* avec ``dbuild.sh deploy.sh bsp-linux``.
 
 Implémentation d'un traitement immédiat pour les *switches*
 ===========================================================
