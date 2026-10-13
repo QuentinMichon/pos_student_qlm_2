@@ -1,0 +1,105 @@
+--- a/arch/arm/lib/vectors.S
++++ b/arch/arm/lib/vectors.S
+@@ -178,8 +178,9 @@
+ #define S_R1		4
+ #define S_R0		0
+ 
+-#define MODE_SVC 0x13
+-#define I_BIT	 0x80
++#define MODE_SVC 	0x13
++#define MODE_MASK	0x0000001f
++#define I_BIT	 	0x80
+ 
+ /*
+  * use bad_save_user_regs for abort/prefetch/undef/swi ...
+@@ -235,13 +236,16 @@
+ 	.endm
+ 
+ 	.macro get_irq_stack			@ setup IRQ stack
+-	ldr	sp, IRQ_STACK_START
++	ldr	sp, =IRQ_STACK_START
+ 	.endm
+ 
+ 	.macro get_fiq_stack			@ setup FIQ stack
+ 	ldr	sp, FIQ_STACK_START
+ 	.endm
+ 
++IRQ_STACK_START:
++	.space 1024
++
+ /*
+  * exception handlers
+  */
+@@ -276,12 +280,68 @@
+ 	bad_save_user_regs
+ 	bl	do_not_used
+ 
+-
+ 	.align	5
+ irq:
+-	get_bad_stack
+-	bad_save_user_regs
+-	bl	do_irq
++
++	get_irq_stack
++
++ 	str 	r0, [sp]		@ original r0
++    str 	lr, [sp, #4]	@ lr_irq
++
++    mrs 	r0, spsr 		@ to preserve irq bit
++    str		r0, [sp, #8]	@ spsr_irq
++
++    mov		r0, sp			@ to maintain a reference on sp_irq; r0 will not be affected after mode switch
++
++    @ Now switch back to SVC. IRQs are disabled
++    mrs		lr, cpsr
++
++    bic		lr, lr, #MODE_MASK
++    orr		lr, lr, #MODE_SVC
++
++    @ switch to SVC
++    msr		cpsr, lr
++
++    @ --- SVC mode from now on ---
++
++	str		sp, [sp, #(S_SP-S_FRAME_SIZE)]	@ save sp
++
++	sub		sp, sp, #S_FRAME_SIZE
++
++	@ Store the lr_svc (before the irq)
++	str		lr, [sp, #S_LR]	@ current lr_svc
++
++    @ preserve spsr for future IRQ enabling
++    ldr		lr, [r0, #8]   			@ retrieve spsr_irq
++    str		lr, [sp, #S_PSR]	@ location of spsr_svc (hence cpsr right before the interrupt)
++
++	@ Retrieve the lr_irq to set the pc out of this routine
++	ldr 	lr, [r0, #4]			@ retrieve lr_irq to set lr_svc
++	sub 	lr, lr, #4				@ Adjust the lr since it is automatically set from pc (in advance of 2 instructions due to the pipeline)
++	str 	lr, [sp, #S_PC]  	@ future pc at exit
++
++	ldr 	r0, [r0]			    @ original r0
++
++    stmia 	sp, {r0-r12}
++
++	@ Make sure r0 refers to the base of the stack frame
++	mov		r0, sp
++
++    bl 		do_irq
++
++    ldr 	lr, [sp, #S_PSR]	@ get the saved spsr and adjust the stack pointer
++    msr		spsr, lr
++
++	@ Restore registers
++   	ldmia 	sp, {r0-r12}
++
++	add		sp, sp, #S_SP
++
++	dsb
++	isb
++
++    @ Now, we retrieve the final registers, sp will be adjusted automatically
++    ldmia 	sp, {sp, lr, pc}^
+ 
+ 	.align	5
+ fiq:
