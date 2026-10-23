@@ -67,83 +67,99 @@ précédents.
 
        * - Modification
          - Commandes
-       * - noyau *SO3*, *driver*, *device tree*
+       * - noyau *SO3*, *driver*, *device tree*, *defconfig*
          - ``build.sh so3`` puis ``deploy.sh bsp-so3``
        * - applications de l'espace utilisateur
-         - ``build.sh usr-so3`` puis ``deploy.sh usr-so3``
+         - ``build.sh usr-so3`` puis ``deploy.sh bsp-so3`` (le *ramfs* est embarqué dans l'ITB,
+           qui doit être régénérée)
 
 .. important::
 
    ``so3/`` est un arbre **généré** : il est récupéré à une version figée de *SO3*, puis le jeu de
    patches du cours (``build/meta-so3/recipes-so3/vext``) y est appliqué. Vos modifications dans
-   ``so3/`` ne sont donc pas suivies par git. Pour les conserver (et les committer), les intégrer
-   au jeu de patches :
+   ``so3/`` ne sont donc pas suivies par git.
+
+   Comme pour ``linux/``, on modifie et on recompile directement dans ``so3/`` : ``build.sh so3``
+   est incrémental et ne régénère ``so3/`` que si le jeu de patches du cours (ou la version de
+   *SO3*) change. Avant de **commiter**, intégrer vos modifications au jeu de patches : ce sont
+   ces patches (sous ``build/meta-so3/``) qui sont commités.
 
    .. code-block:: console
 
       ~/pos25-virt32$ dbuild.sh updiff.sh so3
 
-   Sans cela, une nouvelle récupération des sources refuse d'écraser ``so3/``
-   (``Refusing to re-attach so3``).
+   Si le jeu de patches change alors que ``so3/`` contient des modifications non intégrées, le
+   build refuse de régénérer ``so3/`` pour ne pas les écraser (``Refusing to re-attach so3``) :
+   lancer ``updiff.sh so3`` puis relancer le build.
 
 Mise en place du *driver vExt* dans *SO3*
 =========================================
 
-Il s'agit de mettre en place un nouveau *driver* dans *SO3* en se basant sur un modèle existant. Le
-fichier *ITS* doit être également adapté. L'environnement est celui de *virt32*.
+Il s'agit de mettre en place un nouveau *driver* dans *SO3*. L'environnement est celui de
+*virt32*, dans le worktree ``~/pos25-virt32``.
 
-* Travailler dans le worktree ``~/pos25-virt32``.
+Le jeu de patches du cours fournit déjà un **squelette** du *driver* : le fichier
+``so3/so3/devices/vext.c`` (signatures uniquement, marquées ``A completer (POS)``), l'option
+``CONFIG_VEXT`` dans ``devices/Kconfig`` et la règle correspondante dans ``devices/Makefile``.
+Pour *virt32*, il reste à activer le *driver* et à le décrire dans le *device tree*.
 
-#. Effectuer les commandes ci-dessous afin de configurer le noyau *SO3* avec le *rootfs*
-    chargé en RAM et de recompiler ensuite le noyau :
+#. Comparer le squelette ``devices/vext.c`` avec le modèle de *driver* ``devices/mydev.c`` et
+    examiner comment ``vext.c`` est intégré au build (``devices/Kconfig``, ``devices/Makefile``).
+
+#. Activer le *driver* dans la configuration *virt32* de *SO3*. Le build régénère le ``.config``
+    à partir du *defconfig* à chaque ``build.sh so3`` (``make virt32_fb_defconfig``, choisi par
+    ``IB_CONFIG:so3:virt32`` dans ``local.conf``) : c'est donc le fichier
+    ``so3/so3/configs/virt32_fb_defconfig`` qu'il faut modifier, en y ajoutant ``CONFIG_VEXT=y``
+    (s'inspirer de ``virt64_fb_defconfig``).
 
     .. code-block:: console
 
-       ~/pos25-virt32/so3/so3$ make virt32_defconfig
-       ~/pos25-virt32/so3/so3$ make
+       ~/pos25-virt32$ dbuild.sh build.sh so3
+       ~/pos25-virt32$ grep VEXT so3/so3/.config      # doit afficher CONFIG_VEXT=y
 
-#. Créer une nouvelle image de *rootfs* pour *SO3* (dans le répertoire ``rootfs/``)
-    avec la commande suivante :
+  * Une modification faite directement dans ``.config`` (par exemple avec ``make menuconfig``)
+      est perdue au build suivant.
 
-    .. code-block:: console
-
-       ~/pos25-virt32/rootfs$ ./create_ramfs.sh virt32
-
-#. A partir du modèle de *driver* présent dans le fichier ``devices/mydev.c``,
-    créer un fichier ``devices/vext.c`` qui contiendra le code du nouveau *driver*.
-    Cette tâche comprend l'adaptation des fichiers ``Kconfig`` et ``Makefile``
-#. Adapter le *device tree* permettant au *driver* d'effectuer les initialisations nécessaires.
+#. Adapter le *device tree* ``so3/so3/dts/virt32.dts`` en ajoutant un noeud pour *vExt*,
+    permettant au *driver* d'effectuer les initialisations nécessaires.
 
   * Examiner les autres noeuds du DT afin de comprendre la signification de la propriété ``reg``.
+  * Le noeud *vExt* de ``so3/so3/dts/virt64.dts`` peut servir d'exemple.
+  * Le DT est recompilé avec le noyau (``build.sh so3``) puis placé dans l'ITB au déploiement.
 
 #. Examiner le fichier ``devices/device.c`` et expliquer dans le fichier ``lab09.md`` (à créer)
     comment s'effectue le *parsing* du DT et le remplissage de la structure ``dev_t``,
     reçue par la fonction d'initialisation du *driver* (équivalent d'une fonction ``probe``).
-#. Adapter le fichier ITS ``target/virt32.its`` afin d'utiliser les composants de *SO3*
 
-  * Le noyau *SO3* doit être chargé à l'adresse ``0x4100'8000``
-  * Le *device tree* doit lui être chargé à l'adresse ``0x44a0'0000``
-  * Pour le *rootfs* dans *SO3*, il est nécessaire de spécifier le fichier du ***ramfs***
-      créé plus tôt qui doit être chargé à l'adresse ``0x44c0'0000``
-  * Il existe différentes approches pour la gestion de plusieurs configurations dans l'ITS.
-      Par exemple, l'utilisation de la propriété ``default`` dans le noeud ``configurations`` sont deux possibilités.
+#. Examiner le fichier ITS ``build/meta-bsp/recipes-bsp/so3/files/its/virt32_so3.its`` utilisé
+    par ``deploy.sh bsp-so3`` et expliquer dans ``lab09.md`` :
 
-#. Compiler *SO3* avec le nouveau driver
+  * à quelles adresses sont chargés le noyau (``so3.bin``), le *device tree* (``virt32.dtb``)
+      et le *ramfs* (``rootfs.fat``), et pourquoi ces adresses ne se chevauchent pas ;
+  * le rôle de la propriété ``default`` du noeud ``configurations``, et comment ajouter une
+      seconde configuration (par exemple sans *ramfs*) ;
+  * comment ``${IB_SO3_PATH}`` et ``${IB_ROOTFS_PATH}`` sont résolus au moment du build.
 
-#. Compiler les applications de l'espace utilisateur pour *SO3* à l'aide de la commande suivante :
-
-    .. code-block:: console
-
-       ~/pos25-virt32/so3/usr$ ./build.sh
-
-#. Déployer et tester le fonctionnement de *SO3*
+#. Compiler *SO3* avec le nouveau *driver*, ainsi que les applications de l'espace utilisateur
+    et le *ramfs* (``rootfs.fat``, régénéré automatiquement par la recette ``rootfs-so3``) :
 
     .. code-block:: console
 
-       ~/pos25-virt32$ ./deploy.sh -bs
+       ~/pos25-virt32$ dbuild.sh build.sh bsp-so3
 
-  * L'option ``b`` déploie le noyau de *SO3*
-  * L'option ``s`` déploie les applications user-space de *SO3*
+#. Déployer et tester le fonctionnement de *SO3* :
+
+    .. code-block:: console
+
+       ~/pos25-virt32$ dbuild.sh deploy.sh bsp-so3
+       ~/pos25-virt32$ dbuild.sh st.sh
+
+#. Avant de commiter, intégrer les modifications faites dans ``so3/`` (``vext.c``, *defconfig*,
+    DT) au jeu de patches :
+
+    .. code-block:: console
+
+       ~/pos25-virt32$ dbuild.sh updiff.sh so3
 
 Portage de la gestion des LEDs
 ==============================
@@ -179,4 +195,10 @@ simplement dans l'environnement *SO3*.
 #. Déployer l'application et tester son fonctionnement.
 
   * Le déploiement des applications *SO3* (et des nouvelles entrées dans ``dev/``)
-      s'effectue avec l'option ``-s`` du script ``deploy.sh``
+      se fait en recompilant ``usr-so3``, puis en redéployant ``bsp-so3`` : les applications
+      sont copiées dans le *ramfs*, lui-même embarqué dans l'ITB, qui doit donc être régénérée.
+
+      .. code-block:: console
+
+         ~/pos25-virt32$ dbuild.sh build.sh usr-so3
+         ~/pos25-virt32$ dbuild.sh deploy.sh bsp-so3
