@@ -41,6 +41,10 @@
 # bbappend's. Same idiom as the meta-usr vext bbappend.
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
+
+# updiff must merge into THIS patchset, not create a second one under the base
+# recipe's files/ (which nothing requires, so the build would never use it).
+IB_PATCHSET_DIR := "${THISDIR}/files"
 FILESPATH:prepend = "${THISDIR}/../vext/files/0001-${PF}:"
 
 require files/0001-${PF}-patches.inc

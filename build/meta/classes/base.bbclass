@@ -469,6 +469,43 @@ def ib_guard_unfolded_edits(d, action, consequence):
              "them (the next attach keeps the prior tree in %s.back)."
              % (action, pn, consequence, pn, target))
 
+# Digest of the local patch set (every file:// entry of SRC_URI), for use as
+# do_patch[stamp-extra-info] by fetched recipes. The stamps of this build system
+# carry no signature hash, so without it a course update to the patch set (or a
+# do_updiff) would never re-run do_patch/do_attach_infrabase. Each file is also
+# registered as a parse dependency, so editing one invalidates the parse cache
+# and the digest is recomputed. Call it from anonymous python.
+def ib_patchset_digest(d):
+    import hashlib
+
+    h = hashlib.sha256()
+    for uri in (d.getVar('SRC_URI') or '').split():
+        if not uri.startswith('file://'):
+            continue
+        name = uri[len('file://'):].split(';')[0]
+        path = bb.utils.which(d.getVar('FILESPATH'), name)
+        if not path:
+            continue
+        bb.parse.mark_dependency(d, path)
+        h.update(name.encode())
+        with open(path, 'rb') as f:
+            h.update(f.read())
+    return h.hexdigest()[:16]
+
+# Companion of a stamp-extra-info key: drop this task's stamps for OTHER keys
+# before it runs. Otherwise going back to a key already built once (a reverted
+# patch, a SRCREV rolled back) finds its old stamp still there, BitBake deems the
+# task current, and the tree is silently left at the newer content. Add it to
+# the task's prefuncs; the stamp for the current key is written after the task.
+python ib_drop_stale_stamps() {
+    import glob
+
+    task = 'do_' + d.getVar('BB_CURRENTTASK')
+    for st in glob.glob(d.getVar('STAMP') + '.' + task + '.*'):
+        if not st.endswith('.sigdata'):
+            os.remove(st)
+}
+
 python ib_attach_guard() {
     ib_guard_unfolded_edits(d, 're-attach', 'would overwrite the files above')
 }

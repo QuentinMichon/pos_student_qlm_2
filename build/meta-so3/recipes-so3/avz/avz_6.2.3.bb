@@ -35,33 +35,18 @@ IB_TARGET = "${IB_AVZ_PATH}"
 SRC_URI = "git://github.com/smartobjectoriented/so3.git;protocol=https;nobranch=1"
 SRCREV = "94999d9814637dcd8870926a77599e2d545c701a"
 
-# The stamps of this build system carry no signature hash, so a SRCREV
-# change alone does not re-trigger the chain. Run do_fetch on every build
-# (cheap: local git) and, ONLY when the resolved revision differs from the
-# one recorded at the previous fetch, drop the downstream stamps so that
-# unpack/patch/attach re-run and the avz/ tree is refreshed from the new
-# main HEAD. When main has not moved, everything stays incremental.
-do_fetch[nostamp] = "1"
+# The stamps of this build system carry no signature hash, so a SRCREV or
+# patch-set change alone does not re-trigger the chain. Key the stamps on them
+# (stamp-extra-info is appended to the stamp file name): when either changes,
+# fetch/patch and every later task re-run and the avz/ tree is refreshed;
+# otherwise everything stays incremental. See so3_6.2.4.bb — a nostamp do_fetch
+# used to re-attach avz/ on every build.
+do_fetch[stamp-extra-info] = "${SRCREV}"
+do_fetch[prefuncs] += "ib_drop_stale_stamps"
+do_patch[prefuncs] += "ib_drop_stale_stamps"
 
-python do_fetch:append() {
-    import glob
-
-    rev = d.getVar('SRCREV')
-    marker = os.path.join(d.getVar('WORKDIR'), '.last_srcrev')
-
-    last = ''
-    if os.path.exists(marker):
-        with open(marker) as f:
-            last = f.read().strip()
-
-    if last != rev:
-        if last:
-            bb.plain("avz: main moved (%s -> %s), refreshing the source tree" % (last[:9], rev[:9]))
-        for st in glob.glob(os.path.join(d.getVar('TMPDIR'), 'stamps', 'avz-*.do_*')):
-            if not st.endswith('.do_fetch'):
-                os.remove(st)
-        with open(marker, 'w') as f:
-            f.write(rev)
+python () {
+    d.setVarFlag('do_patch', 'stamp-extra-info', ib_patchset_digest(d))
 }
 
 python do_handle_fetch_git() {

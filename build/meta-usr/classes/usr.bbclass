@@ -6,6 +6,12 @@ inherit rootfs
 
 # Class for managing the user space environment
 
+# The user space is built out of tree in ${IB_TARGET}/build (CMake cache,
+# makefiles, objects, build/deploy): none of it is source, and without this
+# updiff turns every CMake-generated file into a patch. Neither the linux nor
+# the so3 usr tree ships a directory of that name.
+IB_UPDIFF_EXCLUDE:append = " build"
+
 # Deployment of user space components
 
 usr_do_install_file_root () {

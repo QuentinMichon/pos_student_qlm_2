@@ -17,6 +17,12 @@ OVERRIDES:append = ":so3"
 
 IB_TARGET = "${IB_SO3_PATH}"
 
+# IB_TARGET is the whole so3/ tree, so updiff would also pick up what the build
+# leaves in it: the arch marker do_configure writes (.ib_last_arch, also in
+# usr/), the usr-so3 CMake build directory (usr/build/) and the rendered
+# ITS/ITB (images/). Upstream SO3 has no directory named build or images.
+IB_UPDIFF_EXCLUDE = ".ib_last_arch build images"
+
 # SO3 is FETCHED from upstream and pinned to a release tag; the course material
 # lives on top of it as a patch set (see recipes-so3/vext), never as edits to
 # the kernel itself. That split is what keeps upstream free of anything
@@ -34,32 +40,25 @@ SRC_URI = "git://github.com/smartobjectoriented/so3.git;protocol=https;nobranch=
 SRCREV = "2e9555f0e1bbc0df0bb902601885dbde5bcfb04c"
 
 # The stamps of this build system carry no signature hash, so bumping SRCREV
-# above would NOT re-trigger the chain on its own: unpack/patch/attach would be
-# skipped and the tree would silently stay at the old revision. Run do_fetch on
-# every build (cheap once cloned) and, only when the resolved revision differs
-# from the one recorded at the previous fetch, drop the downstream stamps so the
-# tree is rebuilt from the new one. Same mechanism as the avz recipe.
-do_fetch[nostamp] = "1"
+# above, or changing the course patch set, would NOT re-trigger the chain on
+# its own: unpack/patch/attach would be skipped and the tree would silently stay
+# stale. Key the stamps on them instead: stamp-extra-info is appended to the
+# stamp file name, so when the value changes the stamp is "missing", the task
+# re-runs, and every later task of the recipe follows (its stamp is now older).
+#
+#   do_fetch  keyed on SRCREV          -> new upstream revision
+#   do_patch  keyed on the patch set   -> course update, or a do_updiff
+#
+# Not do_fetch[nostamp]: that re-ran fetch..attach on EVERY build, so
+# do_attach_infrabase recopied so3/ each time (full rebuild, new files moved to
+# so3.back) and its dirty-tree guard refused any build until the edit had been
+# updiff'ed. Same mechanism as the avz recipe.
+do_fetch[stamp-extra-info] = "${SRCREV}"
+do_fetch[prefuncs] += "ib_drop_stale_stamps"
+do_patch[prefuncs] += "ib_drop_stale_stamps"
 
-python do_fetch:append() {
-    import glob
-
-    rev = d.getVar('SRCREV')
-    marker = os.path.join(d.getVar('WORKDIR'), '.last_srcrev')
-
-    last = ''
-    if os.path.exists(marker):
-        with open(marker) as f:
-            last = f.read().strip()
-
-    if last != rev:
-        if last:
-            bb.plain("so3: revision bumped (%s -> %s), refreshing the source tree" % (last[:9], rev[:9]))
-        for st in glob.glob(os.path.join(d.getVar('TMPDIR'), 'stamps', 'so3-*.do_*')):
-            if not st.endswith('.do_fetch'):
-                os.remove(st)
-        with open(marker, 'w') as f:
-            f.write(rev)
+python () {
+    d.setVarFlag('do_patch', 'stamp-extra-info', ib_patchset_digest(d))
 }
 
 python do_handle_fetch_git() {
