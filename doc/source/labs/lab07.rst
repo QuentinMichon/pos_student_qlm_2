@@ -54,7 +54,8 @@ Cette étape consiste à modifier le driver pour la gestion de *vExt* afin de g�
 
 #. Adapter le *driver* afin de récupérer la propriété permettant d'identifier la plateforme et modifier la fonction ``probe()`` en conséquence.
 
-  * Ne pas oublier de modifier ``build.conf`` avant de compiler le module.
+  * Compiler le module dans le worktree de la plateforme visée (``~/pos25-virt32`` pour *virt32*,
+      ``~/pos25-rpi4`` pour *RPi4*), après y avoir reporté les modifications avec ``git merge``.
   * Après ces modifications, il ne doit plus être nécessaire de modifier le driver pour le compiler entre *virt32* et *rpi4*
   * Attention, certaines opérations effectuées dans les laboratoires précédents sont propres à la plateforme *virt32*.
       Il est donc important de gérer le ``probe`` selon la plateforme choisie dans le device tree.

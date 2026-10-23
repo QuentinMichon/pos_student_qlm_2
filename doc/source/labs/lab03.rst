@@ -23,13 +23,13 @@ Dans ``local.conf`` modifier : ``IB_QEMU_METHOD``. Puis recompiler.
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh build.sh qemu
+       ~/pos25-virt32$ dbuild.sh build.sh qemu
 
 L'ensemble des fichiers concernant le périphérique *vExt* se trouvent dans le répertoire
 ``hw/arm/vext`` de *QEMU*. Cette étape consiste à implémenter le code du périphérique *vExt*
 afin de gérer l'accès aux LEDs.
 
-#. Modifier le fichier ``build.conf`` pour repasser sous ``virt32``.
+#. Revenir dans le worktree ``~/pos25-virt32`` (branche ``wt/virt32``).
 #. Supprimer le fichier ``qemu/build/qemu-system-arm`` qui correspondait à une version
     pré-compilée pour le laboratoire précédent avec le code qui sera implémenté dans celui-ci.
 #. Editer le fichier ``hw/arm/virt.c`` et activer la portion de code qui rattache
@@ -61,8 +61,8 @@ Commencer par déployer le *rootfs* actuel et lancer la simulation :
 
 .. code-block:: console
 
-   ~/pos25$ dbuild.sh deploy.sh rootfs-linux
-   ~/pos25$ dbuild.sh st.sh
+   ~/pos25-virt32$ dbuild.sh deploy.sh rootfs-linux
+   ~/pos25-virt32$ dbuild.sh st.sh
 
 Vérifier que *Linux* se lance correctement et que les utilitaires habituels soient présents
 et fonctionnels (``ls``, ``cd``, ...). Vérifier également que ni ``vim`` ni ``nano`` n'existent déjà
@@ -73,7 +73,7 @@ dans *buildroot* à l'aide de ``menuconfig``, depuis un shell *Docker* (``dbuild
 
 .. code-block:: console
 
-   ~/pos25$ dbuild.sh
+   ~/pos25-virt32$ dbuild.sh
    $ cd linux/rootfs
    $ make menuconfig
 
@@ -94,7 +94,7 @@ Régénérer ce *patch* puis vérifier que seules vos deux lignes ont été ajou
 
 .. code-block:: console
 
-   ~/pos25$ dbuild.sh updiff.sh buildroot
+   ~/pos25-virt32$ dbuild.sh updiff.sh buildroot
 
 Il faut ensuite produire un nouveau ``rootfs.cpio`` contenant les deux paquets. Deux possibilités :
 
@@ -106,8 +106,8 @@ Il faut ensuite produire un nouveau ``rootfs.cpio`` contenant les deux paquets. 
 
   .. code-block:: console
 
-     ~/pos25$ dbuild.sh build.sh rootfs-linux
-     ~/pos25$ cp linux/rootfs/images/rootfs.cpio build/meta-rootfs/recipes-rootfs/linux/files/board/virt32/rootfs.cpio
+     ~/pos25-virt32$ dbuild.sh build.sh rootfs-linux
+     ~/pos25-virt32$ cp linux/rootfs/images/rootfs.cpio build/meta-rootfs/recipes-rootfs/linux/files/board/virt32/rootfs.cpio
 
   .. warning::
      La copie est obligatoire : à chaque *build* ou *deploy*, le fichier ``rootfs.cpio`` de
@@ -118,8 +118,8 @@ Déployer le nouveau *rootfs* et lancer la simulation :
 
 .. code-block:: console
 
-   ~/pos25$ dbuild.sh deploy.sh rootfs-linux
-   ~/pos25$ dbuild.sh st.sh
+   ~/pos25-virt32$ dbuild.sh deploy.sh rootfs-linux
+   ~/pos25-virt32$ dbuild.sh st.sh
 
 Vérifier que les deux utilitaires sont bien présents.
 
@@ -135,11 +135,23 @@ Attention à ne commit que les modifications utiles et concernant le laboratoire
 Par exemple, il n'est pas nécessaire de commit les fichiers résultant de compilation
 (programme, module, ...). Ne pas hésiter à ajouter des règles dans les ``.gitignore`` si besoin.
 
-Ensuite, il faut aller sur la page GitLab de votre repo. Puis, sur le menu à gauche aller dans ``Code > Merge Requests``
-et cliquer sur ``New merge request``. En français, ``merge request`` est traduit pas ``requête de fusion``.
+Le dépôt est construit de laboratoire en laboratoire, avec **un worktree par plateforme**, et
+donc une branche par plateforme (voir :ref:`worktrees`) :
 
-Sélectionnez la branche ``lab03`` comme source et la branche ``dev`` comme cible.
-Revérifiez les changements effectués et continuez.
+* ``~/pos25`` est le clone de **référence** (branche ``main``) : on n'y travaille pas, il sert à
+  récupérer les mises à jour du dépôt de référence et à créer les worktrees ;
+* le worktree ``~/pos25-virt32`` (*virt32*, créé au lab01) travaille sur la branche ``wt/virt32`` ;
+* le worktree ``~/pos25-rpi4`` (*RPi4*, créé au lab02) travaille sur la branche ``wt/rpi4``.
 
-Finalement, mettez ``Rendu lab03`` comme titre et ajouter ``CDieperink`` comme *Reviewer* (*Relecteur* en français)
-et finalisez en appuyant sur le bouton pour créer la *merge request*.
+Commiter dans le worktree où la modification a été faite, puis pousser sa branche :
+
+.. code-block:: console
+
+   ~/pos25-virt32$ git push origin wt/virt32
+   ~/pos25-rpi4$ git push origin wt/rpi4
+
+* Ne pas commiter ``build/conf/local.conf`` : la sélection de la plateforme (et
+  ``IB_STORAGE_DEVICE``) est propre à chaque worktree.
+* Une modification commune aux deux plateformes (*driver*, application) se reporte d'une branche
+  à l'autre avec ``git merge`` ou ``git cherry-pick`` (les branches sont visibles depuis tous les
+  worktrees).

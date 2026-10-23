@@ -21,8 +21,9 @@ de *sysfs*, il s'agira de développer une petite application qui pilote l'alluma
 Utilisation du *framework* des LEDs sous *Linux*
 ================================================
 
-L'environnement est celui de *virt32* (*QEMU*). Il faut donc modifier ``build.conf`` en conséquence
-et également remettre le code de la fonction ``probe`` pour celui de *virt32*.
+L'environnement est celui de *virt32* (*QEMU*). Il faut donc travailler dans le worktree
+``~/pos25-virt32`` (branche ``wt/virt32``) et également remettre le code de la fonction ``probe`` pour celui
+de *virt32*.
 
 L'utilisation des LEDs au niveau application s'effectuera à l'aide des entrées de ``/sys``. On
 souhaite avoir autant d'entrées que de LEDs disponibles, c.-à-d. cinq entrées de classe LED.

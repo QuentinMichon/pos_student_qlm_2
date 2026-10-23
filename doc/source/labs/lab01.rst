@@ -31,17 +31,57 @@ Récupération du code source
 Un dépots Gitlab hébergé sur REDS vous est fournis : 
 ``https://reds-gitlab-2.reds-heig-vd.in/pos-26/<nom>_<prenom>``
 
-Commencer par créer votre dépots local et le relier au dépot de référence.
+Commencer par cloner votre dépôt dans ``~/pos25`` et le relier au dépôt de référence.
 
    .. code-block:: console
 
-      ~/pos25$ git clone https://reds-gitlab-2.reds-heig-vd.in/pos-26/<nom>_<prenom>
+      ~$ git clone https://reds-gitlab-2.reds-heig-vd.in/pos-26/<nom>_<prenom> pos25
+      ~$ cd pos25
       ~/pos25$ git remote add upstream https://reds-gitlab.heig-vd.ch/reds-public/pos_student.git
       ~/pos25$ git fetch upstream
       ~/pos25$ git merge upstream/main
       ~/pos25$ git push origin main
 
-Votre ``push`` vas déclanché la pipeline de build du ``rootfs`` (sur Gitlab aller dans Build/Pipelines).
+Votre ``push`` va déclencher la pipeline de build du ``rootfs`` (sur Gitlab aller dans Build/Pipelines).
+
+Un worktree par plateforme
+--------------------------
+
+Ce clone ``~/pos25`` (branche ``main``) est votre **référence de base** : *on n'y compile pas et on
+n'y travaille pas*. Il sert à récupérer les mises à jour du dépôt de référence et à créer un
+**worktree par plateforme** (voir :ref:`worktrees`). Un worktree est une seconde copie de travail
+du même dépôt, sur sa propre branche ``wt/<plateforme>``, avec ses propres répertoires générés
+(``linux/``, ``u-boot/``, ``build/tmp``, ...) : les plateformes ne partagent ainsi jamais leur
+état de compilation.
+
+Créer le worktree *virt32* depuis un shell de l'**hôte** (pas dans le conteneur : ``dbuild.sh`` ne
+monte que la racine de l'arbre, le répertoire voisin n'y est pas accessible) :
+
+.. code-block:: console
+
+   ~/pos25$ ./scripts/wt.sh add virt32
+   ~/pos25$ cd ../pos25-virt32
+   ~/pos25-virt32$ git push --set-upstream origin wt/virt32
+
+* ``wt.sh add virt32`` crée la branche ``wt/virt32`` à partir de ``main``, la place dans
+  ``../pos25-virt32`` et y sélectionne ``IB_PLATFORM ?= "virt32"`` dans ``build/conf/local.conf``.
+  Cette modification reste locale : **ne pas la committer.**
+* Toujours lancer ``wt.sh`` depuis la référence ``~/pos25`` : le worktree est créé à côté de
+  l'arbre d'où le script est lancé (``../<nom de l'arbre>-<plateforme>``).
+* ``wt.sh list`` affiche les worktrees existants et leur plateforme.
+
+**Toutes les étapes suivantes se font dans le worktree** ``~/pos25-virt32``.
+
+Pour récupérer plus tard une mise à jour du dépôt de référence, la fusionner dans ``main``, puis
+dans la branche de chaque worktree :
+
+.. code-block:: console
+
+   ~/pos25$ git fetch upstream
+   ~/pos25$ git merge upstream/main
+   ~/pos25$ git push origin main
+   ~/pos25$ cd ../pos25-virt32
+   ~/pos25-virt32$ git merge main
 
 
 .. warning::
@@ -49,17 +89,7 @@ Votre ``push`` vas déclanché la pipeline de build du ``rootfs`` (sur Gitlab al
    nécessaires (compilation, déploiement, exécution). Il est donc **nécessaire d'avoir
    *Docker* installé sur votre machine**.
 
-Créez une branche pour le lab01 à partir de la branche ``main``,
-si ce n'est pas déjà fait.
-
-.. code-block:: console
-
-   # S'assurer d'etre sur la bonne branche
-   ~/pos25$ git switch main
-   ~/pos25$ git switch -c lab01
-   ~/pos25$ git push --set-upstream origin lab01
-
-Lancer l'image Docker pour les prochaines étapes.
+Lancer l'image Docker pour les prochaines étapes, depuis la racine du worktree.
 
 .. important::
     ``env.sh`` doit être sourcé depuis la racine de l'arborescence — il détermine l'emplacement de
@@ -70,17 +100,19 @@ Lancer l'image Docker pour les prochaines étapes.
 
 .. code-block:: console
 
-   ~/pos25$ . ./env.sh
-   ~/pos25$ dbuild.sh --build # Prends quelques minutes
+   ~/pos25-virt32$ . ./env.sh
+   ~/pos25-virt32$ dbuild.sh --build # Prends quelques minutes
 
-Attendre la fin de la CI/CD et récupérer l'artefact ``rootfs.cpio``. Le placer dans votre projet local dans 
-``build/meta-rootfs/recipes-rootfs/linux/files/board/<plat>``, ``<plat>`` dépend de la platforme choisie.
+Attendre la fin de la CI/CD et récupérer l'artefact ``rootfs.cpio``. Le placer dans le worktree, dans
+``build/meta-rootfs/recipes-rootfs/linux/files/board/<plat>``, ``<plat>`` dépend de la plateforme
+choisie (ici ``virt32``). Ce fichier n'est pas suivi par git : chaque worktree a besoin du sien.
 
 Pour exécuter les prochaines commandes dans l'environnement Docker, utiliser ``dbuild.sh``
 avant chacune d'elles, ou lancer directement ``dbuild.sh`` sans argument.
 
 La sélection de la cible (*target*) se fait via la variable ``IB_PLATFORM`` dans le fichier
-de configuration ``build/conf/local.conf``.
+de configuration ``build/conf/local.conf``. ``wt.sh`` l'a déjà réglée sur *virt32* dans ce
+worktree : ne pas la modifier, les autres plateformes auront chacune leur propre worktree.
 
 Environnement émulé *QEMU/virt*
 ===============================
@@ -91,11 +123,11 @@ sans **Linux** afin de voir les différentes étapes nécessaires.
 #. **Compiler QEMU.** Cette étape est couverte par le système de scripts *Infrabase*, qui
    invoque la recette ``qemu`` et s'exécute depuis la racine du dépôt :
 
-    .. code-block:: console
+   .. code-block:: console
 
-       ~/pos25$ dbuild.sh build.sh qemu   # compile qemu-system-arm/qemu-system-aarch64
+      ~/pos25-virt32$ dbuild.sh build.sh qemu   # compile qemu-system-arm/qemu-system-aarch64
 
-    .. note::
+   .. note::
       Dans le fichier ``local.conf``, la variable ``IB_QEMU_METHOD`` est définie à
       ``prebuilt``. Cela implique que le script ``build.sh`` va uniquement copier les binaires
       déjà compilés de QEMU. Plus tard, vous serez amené à écrire des fonctionnalités pour QEMU
@@ -105,33 +137,33 @@ sans **Linux** afin de voir les différentes étapes nécessaires.
    l'environnement *QEMU/virt32*. La configuration et la compilation se font en une seule
    commande, depuis la racine du dépôt :
 
-    .. code-block:: console
+   .. code-block:: console
 
-       ~/pos25$ dbuild.sh build.sh uboot
+      ~/pos25-virt32$ dbuild.sh build.sh uboot
 
 #. **Créer une image de la carte SD virtuelle.** Cette étape est automatique :
    ``deploy.sh`` crée l'image (``filesystem/sdcard.img.virt32``) si elle n'existe pas
    encore, puis y copie le *bootloader* compilé (seule la partition *boot* reçoit du
    contenu ; la partition *rootfs* reste vide) :
 
-    .. code-block:: console
+   .. code-block:: console
 
-       ~/pos25$ dbuild.sh deploy.sh uboot
+      ~/pos25-virt32$ dbuild.sh deploy.sh uboot
 
 #. A ce stade, **l'environnement émulé peut être lancé avec le script** ``st``, qui se
    trouve désormais dans ``scripts/`` et se lance via :
 
-    .. code-block:: console
+.. code-block:: console
 
-       ~/pos25$ dbuild.sh st.sh
+   ~/pos25-virt32$ dbuild.sh st.sh
 
-  * Examiner le script ``st`` : 
-     son exécution démarre le *bootloader* sur la machine émulée *virt*. La carte SD virtuelle est déjà associée 
-     à l'émulateur, même sans contenu (le *bootloader* est passé via
-     l'option ``-kernel``).
-  * Observer la taille de la RAM et lister les variables d'environnement prédéfinies avec ``printenv``.
-  * Ignorer les messages d'erreurs apparaissant avant le *prompt* de *U-Boot*.
-  * Pour quitter *QEMU*, il faut taper ``CTRL+A`` puis ``X`` (en relâchant ``CTRL+A``).
+* Examiner le script ``st`` : 
+   son exécution démarre le *bootloader* sur la machine émulée *virt*. La carte SD virtuelle est déjà associée 
+   à l'émulateur, même sans contenu (le *bootloader* est passé via
+   l'option ``-kernel``).
+* Observer la taille de la RAM et lister les variables d'environnement prédéfinies avec ``printenv``.
+* Ignorer les messages d'erreurs apparaissant avant le *prompt* de *U-Boot*.
+* Pour quitter *QEMU*, il faut taper ``CTRL+A`` puis ``X`` (en relâchant ``CTRL+A``).
 
 Modification de *U-Boot (bootloader)*
 =====================================
@@ -160,7 +192,7 @@ Pour cela, suivez les étapes suivantes :
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh build.sh linux
+       ~/pos25-virt32$ dbuild.sh build.sh linux
 
 #. Le script ``deploy.sh`` à la racine du dépôt permet de déployer les différents
    composants. **Examiner les options disponibles** en lançant le script sans argument.
@@ -173,14 +205,14 @@ Pour cela, suivez les étapes suivantes :
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh deploy.sh bsp-linux
+       ~/pos25-virt32$ dbuild.sh deploy.sh bsp-linux
 
 #. **Lancer l'environnement** avec le script ``st`` et vérifier que *Linux* démarre
    correctement jusqu'au terminal :
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh st.sh
+       ~/pos25-virt32$ dbuild.sh st.sh
 
 Rendu du laboratoire
 ====================
@@ -190,11 +222,23 @@ Attention à ne commit que les modifications utiles et concernant le laboratoire
 Par exemple, il n'est pas nécessaire de commit les fichiers résultant de compilation
 (programme, module, ...). Ne pas hésiter à ajouter des règles dans les ``.gitignore`` si besoin.
 
-Ensuite, il faut aller sur la page GitLab de votre repo. Puis, sur le menu à gauche aller dans ``Code > Merge Requests``
-et cliquer sur ``New merge request``. En français, ``merge request`` est traduit pas ``requête de fusion``.
+Le dépôt est construit de laboratoire en laboratoire, avec **un worktree par plateforme**, et
+donc une branche par plateforme (voir :ref:`worktrees`) :
 
-Sélectionnez la branche ``lab01`` comme source et la branche ``dev`` comme cible.
-Revérifiez les changements effectués et continuez.
+* ``~/pos25`` est le clone de **référence** (branche ``main``) : on n'y travaille pas, il sert à
+  récupérer les mises à jour du dépôt de référence et à créer les worktrees ;
+* le worktree ``~/pos25-virt32`` (*virt32*, créé au lab01) travaille sur la branche ``wt/virt32`` ;
+* le worktree ``~/pos25-rpi4`` (*RPi4*, créé au lab02) travaille sur la branche ``wt/rpi4``.
 
-Finalement, mettez ``Rendu lab01`` comme titre et ajouter ``luc.reveyron`` comme *Reviewer* (*Relecteur* en français)
-et finalisez en appuyant sur le bouton pour créer la *merge request*.
+Commiter dans le worktree où la modification a été faite, puis pousser sa branche :
+
+.. code-block:: console
+
+   ~/pos25-virt32$ git push origin wt/virt32
+   ~/pos25-rpi4$ git push origin wt/rpi4
+
+* Ne pas commiter ``build/conf/local.conf`` : la sélection de la plateforme (et
+  ``IB_STORAGE_DEVICE``) est propre à chaque worktree.
+* Une modification commune aux deux plateformes (*driver*, application) se reporte d'une branche
+  à l'autre avec ``git merge`` ou ``git cherry-pick`` (les branches sont visibles depuis tous les
+  worktrees).

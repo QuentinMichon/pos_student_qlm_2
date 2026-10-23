@@ -155,11 +155,23 @@ Attention à ne commit que les modifications utiles et concernant le laboratoire
 Par exemple, il n'est pas nécessaire de commit les fichiers résultant de compilation
 (programme, module, ...). Ne pas hésiter à ajouter des règles dans les ``.gitignore`` si besoin.
 
-Ensuite, il faut aller sur la page GitLab de votre repo. Puis, sur le menu à gauche aller dans ``Code > Merge Requests``
-et cliquer sur ``New merge request``. En français, ``merge request`` est traduit pas ``requête de fusion``.
+Le dépôt est construit de laboratoire en laboratoire, avec **un worktree par plateforme**, et
+donc une branche par plateforme (voir :ref:`worktrees`) :
 
-Sélectionnez la branche ``lab04`` comme source et la branche ``dev`` comme cible.
-Revérifiez les changements effectués et continuez.
+* ``~/pos25`` est le clone de **référence** (branche ``main``) : on n'y travaille pas, il sert à
+  récupérer les mises à jour du dépôt de référence et à créer les worktrees ;
+* le worktree ``~/pos25-virt32`` (*virt32*, créé au lab01) travaille sur la branche ``wt/virt32`` ;
+* le worktree ``~/pos25-rpi4`` (*RPi4*, créé au lab02) travaille sur la branche ``wt/rpi4``.
 
-Finalement, mettez ``Rendu lab04`` comme titre et ajouter ``CDieperink`` comme *Reviewer* (*Relecteur* en français)
-et finalisez en appuyant sur le bouton pour créer la *merge request*.
+Commiter dans le worktree où la modification a été faite, puis pousser sa branche :
+
+.. code-block:: console
+
+   ~/pos25-virt32$ git push origin wt/virt32
+   ~/pos25-rpi4$ git push origin wt/rpi4
+
+* Ne pas commiter ``build/conf/local.conf`` : la sélection de la plateforme (et
+  ``IB_STORAGE_DEVICE``) est propre à chaque worktree.
+* Une modification commune aux deux plateformes (*driver*, application) se reporte d'une branche
+  à l'autre avec ``git merge`` ou ``git cherry-pick`` (les branches sont visibles depuis tous les
+  worktrees).

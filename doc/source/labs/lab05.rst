@@ -40,7 +40,7 @@ au périphérique *vExt*.
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh build.sh bsp-linux
+       ~/pos25-virt32$ dbuild.sh build.sh bsp-linux
 
 #. Editer le module ``linux/usr/src/modules/access.c`` afin de gérer un modèle de type plateforme avec une fonction
     ``probe()``. Cette dernière devra allumer les mêmes LEDs que la version précédente du module.
@@ -52,6 +52,7 @@ au périphérique *vExt*.
       Ne pas utiliser ``BUG_ON()`` ou ``BUG()`` : un *driver* ne doit pas faire planter le noyau.
   * Utiliser les fonctions *managées* ``devm_kzalloc()`` et ``devm_platform_ioremap_resource()`` :
       les ressources sont libérées automatiquement par le noyau au retrait du *driver*.
+
 #. Tester le fonctionnement du module en veillant que la fonction ``probe()`` soit bien exécutée.
     Ne pas oublier de déployer le nouveau *device-tree* avec ``dbuild.sh deploy.sh bsp-linux``.
 
@@ -98,7 +99,14 @@ Déploiement du driver sur *RPi4*
 
 Cette étape consiste à adapter votre driver ``access.c`` afin de le déployer sur Raspberry Pi 4.
 
-#. Modifier le fichier ``local.conf`` pour mettre ``IB_PLATFORM ?= "rpi4"``.
+#. Passer dans le worktree *RPi4* et y récupérer le *driver* développé sur *virt32* (branche
+    ``wt/virt32``) :
+
+    .. code-block:: console
+
+       ~/pos25-virt32$ git commit ...          # commiter d'abord le travail virt32
+       ~/pos25-virt32$ cd ../pos25-rpi4
+       ~/pos25-rpi4$ git merge wt/virt32
 
 #. Éditer le *device-tree* propre à la plate-forme *RPi4* afin de rajouter un noeud dédié à *vExt*. Pour le moment, seul la propriété ``compatible`` est nécessaire.
 
@@ -124,11 +132,23 @@ Attention à ne commit que les modifications utiles et concernant le laboratoire
 Par exemple, il n'est pas nécessaire de commit les fichiers résultant de compilation
 (programme, module, ...). Ne pas hésiter à ajouter des règles dans les ``.gitignore`` si besoin.
 
-Ensuite, il faut aller sur la page GitLab de votre repo. Puis, sur le menu à gauche aller dans ``Code > Merge Requests``
-et cliquer sur ``New merge request``. En français, ``merge request`` est traduit pas ``requête de fusion``.
+Le dépôt est construit de laboratoire en laboratoire, avec **un worktree par plateforme**, et
+donc une branche par plateforme (voir :ref:`worktrees`) :
 
-Sélectionnez la branche ``lab05`` comme source et la branche ``dev`` comme cible.
-Revérifiez les changements effectués et continuez.
+* ``~/pos25`` est le clone de **référence** (branche ``main``) : on n'y travaille pas, il sert à
+  récupérer les mises à jour du dépôt de référence et à créer les worktrees ;
+* le worktree ``~/pos25-virt32`` (*virt32*, créé au lab01) travaille sur la branche ``wt/virt32`` ;
+* le worktree ``~/pos25-rpi4`` (*RPi4*, créé au lab02) travaille sur la branche ``wt/rpi4``.
 
-Finalement, mettez ``Rendu lab05`` comme titre et ajouter ``CDieperink`` comme *Reviewer* (*Relecteur* en français)
-et finalisez en appuyant sur le bouton pour créer la *merge request*.
+Commiter dans le worktree où la modification a été faite, puis pousser sa branche :
+
+.. code-block:: console
+
+   ~/pos25-virt32$ git push origin wt/virt32
+   ~/pos25-rpi4$ git push origin wt/rpi4
+
+* Ne pas commiter ``build/conf/local.conf`` : la sélection de la plateforme (et
+  ``IB_STORAGE_DEVICE``) est propre à chaque worktree.
+* Une modification commune aux deux plateformes (*driver*, application) se reporte d'une branche
+  à l'autre avec ``git merge`` ou ``git cherry-pick`` (les branches sont visibles depuis tous les
+  worktrees).

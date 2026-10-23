@@ -41,7 +41,7 @@ Répondez aux différentes questions suivantes succinctement dans le fichier
 
     .. code-block:: console
 
-       ~/pos25/linux/images$ mkimage -f virt32.its virt32.itb
+       ~/pos25-virt32/linux/images$ mkimage -f virt32.its virt32.itb
 
     Que contient le fichier ``virt32.itb`` ?
 
@@ -52,7 +52,7 @@ Répondez aux différentes questions suivantes succinctement dans le fichier
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh deploy.sh bsp-linux
+       ~/pos25-virt32$ dbuild.sh deploy.sh bsp-linux
 
     Avec *QEMU*, pourquoi *U-Boot* lui-même n'est pas copié dans le disque ?
 
@@ -63,7 +63,7 @@ Répondez aux différentes questions suivantes succinctement dans le fichier
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh deploy.sh rootfs-linux
+       ~/pos25-virt32$ dbuild.sh deploy.sh rootfs-linux
 
     Il n'est pas nécessaire de faire cette commande après une compilation de *Linux*, le
     *rootfs* n'étant pas modifié.
@@ -89,14 +89,14 @@ utilisateur (typiquement à partir d'un shell). Les modules sont alors des fichi
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh build.sh usr-linux
+       ~/pos25-virt32$ dbuild.sh build.sh usr-linux
 
 Le déploiement des applications userspace dans le *rootfs* (principal) s'effectue avec la
 recette ``usr-linux`` :
 
 .. code-block:: console
 
-   ~/pos25$ dbuild.sh deploy.sh usr-linux
+   ~/pos25-virt32$ dbuild.sh deploy.sh usr-linux
 
 * Noter que ``deploy.sh usr-linux`` déploie le contenu de ``usr/build/deploy/`` dans le
   *filesystem*, c.-à-d. dans la carte SD virtuelle ou physique.
@@ -115,7 +115,7 @@ Cette étape permet d'effectuer un accès I/O simple vers les LEDs de *vext*.
 
     .. code-block:: console
 
-       [PC] ~/pos25$ ./scripts/build.sh sense-hat
+       [PC] ~/pos25-virt32$ ./scripts/build.sh sense-hat
 
    Ceci prépare un environnement virtuel Python dans ``build/tmp/sense-hat-emu/venv``.
 
@@ -123,9 +123,9 @@ Cette étape permet d'effectuer un accès I/O simple vers les LEDs de *vext*.
 
     .. code-block:: console
 
-       [PC] ~/pos25$ dbuild.sh
-       [PC] ~/pos25$ . build/tmp/sense-hat-emu/venv/bin/activate
-       [PC] ~/pos25$ python3 sense-hat/sense-hat-server.py
+       [PC] ~/pos25-virt32$ dbuild.sh
+       [PC] ~/pos25-virt32$ . build/tmp/sense-hat-emu/venv/bin/activate
+       [PC] ~/pos25-virt32$ python3 sense-hat/sense-hat-server.py
 
     .. note::
       Pour vérifier que le *venv*/GUI fonctionne indépendamment de QEMU, ``sense-hat/test_leds.py``
@@ -138,7 +138,7 @@ Cette étape permet d'effectuer un accès I/O simple vers les LEDs de *vext*.
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh st.sh -g
+       ~/pos25-virt32$ dbuild.sh st.sh -g
 
   * Le message ``vext_try_connect: connected to Sense-HAT server!`` devrait s'afficher
       dans *QEMU* indiquant la bonne connexion à l'interface.
@@ -176,13 +176,13 @@ Cette étape permet d'effectuer un accès I/O simple vers les LEDs de *vext* dep
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh build.sh usr-linux
+       ~/pos25-virt32$ dbuild.sh build.sh usr-linux
 
 #. **Déployer** les applications et modules :
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh deploy.sh usr-linux
+       ~/pos25-virt32$ dbuild.sh deploy.sh usr-linux
 
 #. Tester le fonctionnement du module.
 
@@ -197,8 +197,16 @@ Les deux plateformes n'ayant pas les mêmes configurations du noyau *Linux* (dri
 il est normalement nécessaire de le recompiler entièrement.
 
 La plateforme est déterminée par la variable ``IB_PLATFORM`` dans le fichier de
-configuration ``build/conf/local.conf`` à la racine du repo. Il faudra donc toujours
-s'assurer de modifier celle-ci quand nécessaire.
+configuration ``build/conf/local.conf`` à la racine du repo. Plutôt que de modifier cette variable
+(et de tout recompiler) à chaque changement de plateforme, on utilise **un worktree par
+plateforme** (voir :ref:`worktrees`) : une seconde copie de travail du même dépôt, sur sa propre
+branche, avec ses propres répertoires générés (``linux/``, ``u-boot/``, ``build/tmp``, ...).
+
+* Le worktree ``~/pos25-virt32`` (créé au lab01) est dédié à *virt32*, branche ``wt/virt32``.
+* Le worktree ``~/pos25-rpi4`` est dédié à la *RPi4*, branche ``wt/rpi4``.
+* Les deux sont créés depuis la référence ``~/pos25`` (branche ``main``).
+
+Passer d'une plateforme à l'autre revient alors à changer de répertoire.
 
 Partage des périphériques USB à WSL
 ===================================
@@ -248,15 +256,35 @@ Déploiement RPi4
 
 Le déploiement sur la *Raspberry Pi 4* s'effectuera à l'aide d'une carte SD (*SD-card*).
 
-#. **Sélectionner la cible.** Mettre à jour la variable ``IB_PLATFORM`` dans le fichier
-   ``build/conf/local.conf`` avec le nom ``rpi4``.
-
-#. **Compiler.** La configuration et la compilation de *U-Boot* et *Linux* pour la *RPi4*
-   se font en une seule commande scriptée, depuis la racine du dépôt :
+#. **Créer le worktree RPi4.** Depuis un shell de l'**hôte** (pas dans le conteneur :
+   ``dbuild.sh`` ne monte que la racine de l'arbre, le répertoire voisin n'y est pas accessible) :
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh build.sh bsp-linux
+       ~/pos25$ ./scripts/wt.sh add rpi4
+       ~/pos25$ cd ../pos25-rpi4
+       ~/pos25-rpi4$ git merge wt/virt32      # reprendre le travail fait sur virt32
+       ~/pos25-rpi4$ git push --set-upstream origin wt/rpi4
+       ~/pos25-rpi4$ . ./env.sh
+
+  * Lancer ``wt.sh`` depuis la référence ``~/pos25`` : le worktree est créé à côté de l'arbre
+      d'où le script est lancé.
+  * ``wt.sh add rpi4`` crée la branche ``wt/rpi4`` à partir de ``main``, la place dans
+      ``../pos25-rpi4`` et y sélectionne ``IB_PLATFORM ?= "rpi4"`` dans ``build/conf/local.conf``.
+      Cette modification reste locale : ne pas la committer.
+  * Si ``env.sh`` a déjà été chargé dans ce terminal, un ``cd`` vers un autre arbre propose de
+      basculer l'environnement : répondre ``y``.
+  * L'image *Docker* est partagée entre les arbres : inutile de refaire ``dbuild.sh --build``.
+  * ``rootfs.cpio`` n'est pas suivi par git : copier l'artefact *RPi4* de la CI dans
+      ``build/meta-rootfs/recipes-rootfs/linux/files/board/rpi4/`` **du worktree**.
+
+#. **Compiler.** La configuration et la compilation de *U-Boot* et *Linux* pour la *RPi4*
+   se font en une seule commande scriptée, depuis la racine du worktree. Le worktree part d'un
+   ``build/tmp`` vide : cette première compilation est aussi longue que celle du lab01.
+
+    .. code-block:: console
+
+       ~/pos25-rpi4$ dbuild.sh build.sh bsp-linux
 
 #. Insérer la carte SD.
 
@@ -276,13 +304,13 @@ Le déploiement sur la *Raspberry Pi 4* s'effectuera à l'aide d'une carte SD (*
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh init_storage.sh
+       ~/pos25-rpi4$ dbuild.sh init_storage.sh
 
 #. **Déployer**, mais sans la partie ``usr/``, sur la carte SD réelle de la *RPi4* :
 
     .. code-block:: console
 
-       ~/pos25$ dbuild.sh deploy.sh bsp-linux
+       ~/pos25-rpi4$ dbuild.sh deploy.sh bsp-linux
 
 #. Tester l'environnement *Linux* sur la *board*.
 
@@ -291,7 +319,7 @@ Le déploiement sur la *Raspberry Pi 4* s'effectuera à l'aide d'une carte SD (*
 
       .. code-block:: console
 
-         ~/pos25$ picocom /dev/ttyUSB0 -b 115200 -r -l
+         ~/pos25-rpi4$ picocom /dev/ttyUSB0 -b 115200 -r -l
 
       Pour quitter ``picocom``, il faut faire ``CTRL+X`` puis ``CTRL+A``
       (en maintenant ``CTRL`` appuyé)
@@ -308,11 +336,23 @@ Attention à ne commit que les modifications utiles et concernant le laboratoire
 Par exemple, il n'est pas nécessaire de commit les fichiers résultant de compilation
 (programme, module, ...). Ne pas hésiter à ajouter des règles dans les ``.gitignore`` si besoin.
 
-Ensuite, il faut aller sur la page GitLab de votre repo. Puis, sur le menu à gauche aller dans ``Code > Merge Requests``
-et cliquer sur ``New merge request``. En français, ``merge request`` est traduit pas ``requête de fusion``.
+Le dépôt est construit de laboratoire en laboratoire, avec **un worktree par plateforme**, et
+donc une branche par plateforme (voir :ref:`worktrees`) :
 
-Sélectionnez la branche ``lab02`` comme source et la branche ``dev`` comme cible.
-Revérifiez les changements effectués et continuez.
+* ``~/pos25`` est le clone de **référence** (branche ``main``) : on n'y travaille pas, il sert à
+  récupérer les mises à jour du dépôt de référence et à créer les worktrees ;
+* le worktree ``~/pos25-virt32`` (*virt32*, créé au lab01) travaille sur la branche ``wt/virt32`` ;
+* le worktree ``~/pos25-rpi4`` (*RPi4*, créé au lab02) travaille sur la branche ``wt/rpi4``.
 
-Finalement, mettez ``Rendu lab02`` comme titre et ajouter ``CDieperink`` comme *Reviewer* (*Relecteur* en français)
-et finalisez en appuyant sur le bouton pour créer la *merge request*.
+Commiter dans le worktree où la modification a été faite, puis pousser sa branche :
+
+.. code-block:: console
+
+   ~/pos25-virt32$ git push origin wt/virt32
+   ~/pos25-rpi4$ git push origin wt/rpi4
+
+* Ne pas commiter ``build/conf/local.conf`` : la sélection de la plateforme (et
+  ``IB_STORAGE_DEVICE``) est propre à chaque worktree.
+* Une modification commune aux deux plateformes (*driver*, application) se reporte d'une branche
+  à l'autre avec ``git merge`` ou ``git cherry-pick`` (les branches sont visibles depuis tous les
+  worktrees).
