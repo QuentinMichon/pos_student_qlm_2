@@ -124,14 +124,13 @@ Pour *virt32*, il reste à activer le *driver* et à le décrire dans le *device
     permettant au *driver* d'effectuer les initialisations nécessaires.
 
   * Examiner les autres noeuds du DT afin de comprendre la signification de la propriété ``reg``.
-  * Le noeud *vExt* de ``so3/so3/dts/virt64.dts`` peut servir d'exemple.
   * Le DT est recompilé avec le noyau (``build.sh so3``) puis placé dans l'ITB au déploiement.
 
 #. Examiner le fichier ``devices/device.c`` et expliquer dans le fichier ``lab09.md`` (à créer)
     comment s'effectue le *parsing* du DT et le remplissage de la structure ``dev_t``,
     reçue par la fonction d'initialisation du *driver* (équivalent d'une fonction ``probe``).
 
-#. Examiner le fichier ITS ``build/meta-bsp/recipes-bsp/so3/files/its/virt32_so3.its`` utilisé
+#. Examiner le fichier ITS ``build/meta-bsp/recipes-bsp/so3/files/0001-so3-6.2.4-r0/virt32_so3.its`` utilisé
     par ``deploy.sh bsp-so3`` et expliquer dans ``lab09.md`` :
 
   * à quelles adresses sont chargés le noyau (``so3.bin``), le *device tree* (``virt32.dtb``)
@@ -167,6 +166,8 @@ Portage de la gestion des LEDs
 Cette étape porte sur le portage de la gestion des LEDs du périphérique *vExt*.
 La version du *driver* développé sous *Linux* servira de base et le code pourra être repris
 et adapté autant que possible. La gestion des données internes au *driver* se fera à l'aide d'une structure privée.
+
+Inspirez-vous de ``so3/so3/devices/rtc/pl031.c``, ``so3/so3/devices/fb/virtfb.c`` et ``so3/so3/devices/timer/sp804.c``
 
 #. Compléter le *driver vExt* dans *SO3* avec la gestion d'accès aux LEDs.
 #. Test l'allumage d'une LED (ou plusieurs) dans la fonction d'initialisation.
