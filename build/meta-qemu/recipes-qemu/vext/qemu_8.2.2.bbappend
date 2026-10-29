@@ -10,10 +10,9 @@
 # would silently drop vext.
 #
 # Delivered as ONE PATCH PER SOURCE FILE, like the meta-so3, meta-usr and
-# meta-linux vext overlays. do_updiff can only consolidate a file whose patchset
-# holds exactly one patch targeting it (see index_patchset() in
-# meta/classes/patch.bbclass); the previous single 0003-vext.patch covered
-# fifteen files at once, so none of them was ever regenerable in place. It also
+# meta-linux vext overlays. do_updiff regenerates patches file by file (see
+# do_updiff in meta/classes/patch.bbclass); the previous single 0003-vext.patch
+# covered fifteen files at once, so none of them was ever regenerable. It also
 # separates the teaching concerns — the device model, its emulation helpers, the
 # examples and the build wiring are handed out or written independently.
 #

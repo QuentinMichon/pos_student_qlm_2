@@ -27,10 +27,9 @@
 # Delivered as ONE PATCH PER SOURCE FILE, like the meta-usr and meta-linux vext
 # overlays. Two reasons, beyond readability:
 #
-#   - do_updiff can only consolidate a file whose patchset holds exactly one
-#     patch targeting it (see index_patchset() in meta/classes/patch.bbclass).
-#     The previous single 0001-vext.patch covered thirteen files at once, so
-#     none of them could ever be regenerated in place.
+#   - do_updiff regenerates patches file by file (see do_updiff in
+#     meta/classes/patch.bbclass). The previous single 0001-vext.patch covered
+#     thirteen files at once, so none of them could ever be regenerated.
 #   - each file is a separate teaching concern — the driver, the Kconfig entry,
 #     the Makefile wiring, the device-tree nodes — and a lab may hand out some
 #     while asking students to write the others. That choice is only expressible
