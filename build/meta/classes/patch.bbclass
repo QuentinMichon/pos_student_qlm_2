@@ -668,6 +668,19 @@ python do_updiff() {
     series, index = ib_patch_series(d)
     staged = index_patchset(staging)
 
+    # A real edit adds a handful of files. Dozens of new ones is a built tree
+    # seen through an incomplete exclude list: refuse before writing anything.
+
+    limit = int(d.getVar('IB_UPDIFF_MAX_NEW') or 20)
+    new = sorted(rel for rel in staged if rel not in index)
+    if len(new) > limit:
+        shutil.rmtree(staging)
+        bb.fatal(f"do_updiff: {len(new)} files in {target} have no patch yet "
+                 f"(limit {limit}), e.g. {', '.join(new[:5])}. That is build "
+                 "output taken for source: name it in IB_UPDIFF_EXCLUDE, or "
+                 "raise IB_UPDIFF_MAX_NEW if the count is right. Nothing was "
+                 "written.")
+
     # Where new patches go: the last patchset of the series with a plain
     # .inc, else the recipe's own 0001-${PF}/ (created on first use).
     append_dir = None
