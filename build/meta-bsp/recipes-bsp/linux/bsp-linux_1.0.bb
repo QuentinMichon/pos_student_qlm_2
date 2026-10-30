@@ -58,8 +58,7 @@ do_itb () {
 	# Two failures, two messages. "IB_TARGET_ITS is unset" and "its template
 	# is missing" are different problems, and the former is the common one:
 	# every IB_TARGET_ITS:linux:<plat> line in local.conf commented out is
-	# enough. That case used to report a bare "No corresponding ITS found ()",
-	# naming neither the variable to set nor the values it accepts.
+	# enough, and the message has to name the variable and its values.
 	# Plain $its_avail, no braces: bitbake expands every ${...} at parse
 	# time, so a braced shell variable would go through its expander first.
 	# The <plat>${IB_GUEST_SUFFIX} template is dropped from the list: it is

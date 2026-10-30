@@ -3,7 +3,7 @@
 # Storage layout for ARM platforms (sdcard.img, IB_ROOTFS_SIZE total).
 #
 # Two partitions:
-# - p1, FAT, 128 MiB — boot partition
+# - p1, FAT, IB_BOOT_PARTITION_SIZE (256 MiB by default) — boot partition
 #       uEnv.txt, AVZ ITB (small), legacy firmware artefacts
 # - p2, ext4, ~rest of IB_ROOTFS_SIZE — rootfs partition (label "rootfs1")
 #       /          — Linux rootfs proper (deployed by rootfs-linux).

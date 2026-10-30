@@ -9,7 +9,7 @@ def __do_platform_deploy(d):
     import os
     from bb.process import run
 
-    print("Platorm " + d.getVar('IB_PLATFORM'))
+    print("Platform " + d.getVar('IB_PLATFORM'))
    
     filedirname = d.getVar('FILE_DIRNAME')
     dst = d.getVar('IB_FILESYSTEM_PATH')
