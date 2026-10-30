@@ -25,10 +25,10 @@ LEDs correctement.
 .. code-block:: console
 
    # Allume la LED central en acces de 2 octets
-   [U-Boot] => mw.w 0x2000003a 0x1 1
+   [U-Boot] => mw.w 0x0880403a 0x1 1
 
    # Allume la LED de gauche en acces de 4 octets
-   [U-Boot] => mw.l 0x20000038 0x20000 1
+   [U-Boot] => mw.l 0x08804038 0x20000 1
 
 * L'accès peut être considéré comme aligné sur la taille accédée.
   Donc un accès de 2 octets est aligné sur 2 octets et un accès
