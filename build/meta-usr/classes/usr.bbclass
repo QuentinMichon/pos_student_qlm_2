@@ -9,8 +9,9 @@ inherit rootfs
 # The user space is built out of tree in ${IB_TARGET}/build (CMake cache,
 # makefiles, objects, build/deploy): none of it is source, and without this
 # updiff turns every CMake-generated file into a patch. Neither the linux nor
-# the so3 usr tree ships a directory of that name.
-IB_UPDIFF_EXCLUDE:append = " build"
+# the so3 usr tree ships a directory of that name. .ib_last_arch is the arch
+# marker do_build writes.
+IB_UPDIFF_EXCLUDE:append = " build .ib_last_arch"
 
 # Deployment of user space components
 
@@ -55,7 +56,12 @@ def __retrieve_usr_dir(d):
     # so that it will be possible to handle the fetch of submodules before
     # the execution of attach_infrabase task
 
-    cmd = f"find . -not -path '*/.git/*' -and -not -path '*/patches/*' -and \( -type f -or -type d -empty \) -exec cp -r --parents -t {dst_dir} {{}} +"
+    # -type l matters: without it symbolic links are simply not seen, and
+    # the round-trip through ${S} drops every one of them -- the build then
+    # fails at cmake time on a missing source rather than anywhere
+    # informative. cp -a instead of -r to copy links as links.
+
+    cmd = f"find . -not -path '*/.git/*' -and -not -path '*/patches/*' -and \( -type f -or -type l -or -type d -empty \) -exec cp -a --parents -t {dst_dir} {{}} +"
     result = subprocess.run(cmd, shell=True, check=True, cwd=src_dir)
 
 python retrieve_usr_dir() {
@@ -103,17 +109,43 @@ do_configure () {
 
 # Build of user space custom applications
 
+# Two knobs a user space may need, defaulting to the behaviour every tree
+# had before they existed:
+#
+#   IB_USR_CMAKE_ARGS   extra -D flags for the configure step.
+#   IB_USR_MAKE_TARGET  the make target; empty means the default one.
+#
+# They exist so a user space that needs a variation does not have to
+# redefine do_build() wholesale in a bbappend, which would make the append a
+# copy of this function and silently miss any later fix to it.
+
+IB_USR_CMAKE_ARGS ?= ""
+IB_USR_MAKE_TARGET ?= ""
+
 do_build[nostamp] = "1"
 do_build () {
+
+	# CMakeCache.txt pins the compiler, so an arch switch (virt64 <-> virt32)
+	# would keep building with the previous arch's toolchain. Wipe build/ when
+	# the arch changes or is unknown; the marker sits outside build/ to
+	# survive the wipe.
+
+	_arch_marker="${IB_TARGET}/.ib_last_arch"
+	if [ "$(cat $_arch_marker 2>/dev/null)" != "${IB_PLAT_CPU}" ]; then
+		echo "usr arch is now ${IB_PLAT_CPU}; wiping build/"
+		rm -rf ${IB_TARGET}/build
+	fi
+	echo "${IB_PLAT_CPU}" > "$_arch_marker"
 
 	mkdir -p ${IB_TARGET}/build
 	cd ${IB_TARGET}/build
 	 
 	# User space applications
 	cmake -Wno-dev --no-warn-unused-cli -DCMAKE_BUILD_TYPE=${IB_USR_BUILD_TYPE} \
-		-DCMAKE_KERNEL_PATH=${IB_LINUX_PATH} -DCMAKE_TOOLCHAIN_FILE=${IB_TOOLCHAIN_PATH} ..
+		-DCMAKE_KERNEL_PATH=${IB_LINUX_PATH} -DCMAKE_TOOLCHAIN_FILE=${IB_TOOLCHAIN_PATH} \
+		${IB_USR_CMAKE_ARGS} ..
 	 
-	make -j${CORES}
+	make ${IB_USR_MAKE_TARGET} -j${CORES}
 
 	cd ${IB_TARGET}
 
@@ -127,15 +159,19 @@ do_build () {
 
 do_clean[nostamp] = "1"
 addtask do_clean
+
 # The usr build rewrites attached files itself (see the manifest note in
 # do_clean below), so base.bbclass's clean guard would read every build as
 # an unfolded edit and refuse every clean.
+
 IB_CLEAN_GUARD = "0"
+
 # Implemented in Python on purpose: a *shell* task needs ${WORKDIR}/temp to
 # exist so bitbake can create its output fifo there, but do_clean often runs
 # when that dir is absent (fresh tree / already-cleaned), giving
 # "No such file or directory: .../temp/fifo.NNNN". Python tasks create the
 # temp dir themselves and use no fifo, so they are robust here.
+
 python do_clean() {
     import os, shutil
     target = d.getVar('IB_TARGET')
@@ -152,6 +188,7 @@ python do_clean() {
     # A clean is an explicit reset, and the attach still backs the tree up to
     # ${IB_TARGET}.back, so dropping the manifest here is the safe, generic fix —
     # the guard stays fully active for builds that were NOT preceded by a clean.
+    
     try:
         os.remove(target + '.attach.sha256')
     except OSError:

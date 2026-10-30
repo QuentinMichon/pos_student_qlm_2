@@ -12,7 +12,10 @@ IB_LINUX_PATH = "${IB_DIR}/linux/linux"
 # matches by basename only and is irrelevant to the ARM targets of this tree).
 IB_UPDIFF_EXCLUDE ??= "dtbs-list vdso.lds *.asn1.c *.asn1.h *.dtb.S \
     scsi_devinfo_tbl.c consolemap_deftbl.c defkeymap.c logo_*_clut224.c \
-    utsversion-tmp.h bounds.s crc32table.h crc64table.h oid_registry_data.c"
+    utsversion-tmp.h bounds.s crc32table.h crc64table.h oid_registry_data.c \
+    vdso32.lds hyp.lds hyp-reloc.S hyp-constants.s hyp_constants.h \
+    sha256-core.S sha512-core.S rq-offsets.s \
+    ucs_fallback_table.h ucs_recompose_table.h ucs_width_table.h"
 
 
 def __do_clean(d):

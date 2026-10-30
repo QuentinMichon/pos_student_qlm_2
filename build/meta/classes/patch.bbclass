@@ -233,6 +233,7 @@ IB_PATCHSET_DIR ??= "${FILE_DIRNAME}/files"
 python patch_do_diffcompose() {
     import os
     import re
+    import fnmatch
     import shlex
     import shutil
     import subprocess
@@ -319,8 +320,16 @@ python patch_do_diffcompose() {
     # `build/`, which holds 1000+ generated files). A blanket exclude in
     # this shared class would be unsafe (another recipe might ship real
     # source under such a name), so each recipe opts in via IB_UPDIFF_EXCLUDE.
+    #
+    # An entry holding a '/' is a path from the tree root instead (fnmatch
+    # pattern), for a generated file whose basename a real source shares:
+    # U-Boot's include/config.h against arch/*/include/asm/config.h.
+    path_excludes = []
     for x in (d.getVar('IB_UPDIFF_EXCLUDE') or '').split():
-        excludes += f' --exclude={shlex.quote(x)}'
+        if '/' in x:
+            path_excludes.append(x)
+        else:
+            excludes += f' --exclude={shlex.quote(x)}'
     statement = (
         f'diff -Nrq {excludes} --no-dereference '
         f'{shlex.quote(source_dir)} . > {shlex.quote(diff_files_tmp)}'
@@ -371,6 +380,9 @@ python patch_do_diffcompose() {
                     tgt_path = full
                     rel = os.path.relpath(full, '.')
                     src_path = os.path.join(source_dir, rel)
+
+            if any(fnmatch.fnmatch(rel, p) for p in path_excludes):
+                continue
 
             filename = os.path.basename(rel)
             output_patch = os.path.join(output_dir, f"{new_number:04d}-{filename}.patch")
