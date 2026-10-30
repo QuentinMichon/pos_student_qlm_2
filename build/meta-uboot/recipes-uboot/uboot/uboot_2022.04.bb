@@ -70,10 +70,16 @@ do_configure () {
 	# either (see bsp_virt64.inc). virt64_defconfig boots both SO3 and Linux
 	# here, as it did when the default chain was still "".
 
+	# CROSS_COMPILE has to be pinned here too, not only in do_build: the
+	# U-Boot Makefile carries a patched-in default of
+	# aarch64-none-linux-gnu-, and the defconfig step probes the compiler.
+	# On a 32-bit platform, or in a container that ships no 64-bit
+	# toolchain, that default is absent and Kconfig dies with "syntax error".
+
 	if [ "${IB_PLATFORM}" = "rpi4" ]; then
-		make rpi_4_32b_defconfig
+		make CROSS_COMPILE=${IB_TOOLCHAIN}- rpi_4_32b_defconfig
 	else
-		make ${IB_PLATFORM}_defconfig
+		make CROSS_COMPILE=${IB_TOOLCHAIN}- ${IB_PLATFORM}_defconfig
 	fi
 
 	# Specific handling for bbb platform
