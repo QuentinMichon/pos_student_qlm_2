@@ -47,7 +47,10 @@ pr_help()
 	printf "$progname uboot                           Build u-boot\n"
 	printf "$progname -x usr-so3                      Build the SO3 user space\n"
 	printf "$progname bsp-so3                         Build the full SO3 BSP\n"
-	printf "$progname -v -c bsp-so3                   Clean and rebuild the BSP, verbose\n"
+	printf "$progname -v -c bsp-so3                   Clean and rebuild the BSP, verbose\n\n"
+	printf "On virt32/virt64, a BSP build also builds QEMU when its binary is still\n"
+	printf "missing, so the tree is runnable with st.sh right away. Set\n"
+	printf "IB_BUILD_QEMU=\"0\" in build/conf/local.conf to skip that.\n"
 }
 
 if test $# -eq 0

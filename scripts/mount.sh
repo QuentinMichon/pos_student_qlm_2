@@ -28,9 +28,9 @@ pr_usage()
 	printf "    ramfs|rootfs [r]   Unpack a rootfs recipe's board/<plat>/{initrd,rootfs}.cpio\n"
 	printf "                       into that recipe's WORKDIR, with <IB_ROOTFS_PATH>/fs\n"
 	printf "                       pointing at it. Goes through bitbake and needs root\n"
-	printf "                       ('cpio -id' restores device nodes). The recipe defaults to\n"
-	printf "                       rootfs-linux; pass rootfs-so3, rootfs-torizon or buildroot\n"
-	printf "                       as [r]. Repack with the matching 'umount.sh'.\n"
+	printf "                       ('cpio -id' restores device nodes). The recipe defaults\n"
+	printf "                       to rootfs-linux; pass rootfs-so3 or buildroot as [r].\n"
+	printf "                       Repack with the matching 'umount.sh'.\n"
 	printf "    -h                 Print this help\n\n"
 	printf "For a plain initrd edit prefer -i: same archive, without sudo or bitbake.\n"
 	printf "'rootfs' has no such alternative.\n\n"
@@ -72,7 +72,7 @@ fi
 # place. Repack with the matching `umount.sh ramfs|rootfs`.
 #
 # The recipe defaults to rootfs-linux; pass another one (rootfs-so3,
-# rootfs-torizon, buildroot) as the second argument.
+# buildroot) as the second argument.
 #
 # This is the bitbake path (do_{ramfs,rootfs}_mount) and needs root —
 # `cpio -id` restores device nodes — hence the sudo session below.

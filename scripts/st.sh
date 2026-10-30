@@ -11,6 +11,18 @@
 # build/conf/local.conf) is anchored on that root. See
 # scripts/common/setup_env.sh.
 
+# Handled before setup_env.sh: printing the help should not trigger the
+# tree-switch prompt that sourcing the environment can raise.
+
+case "$1" in
+    -h|--help)
+        echo "Usage: $(basename "$0") [-d] [-g] [qemu-option]"
+        echo "  -d   graphical: open the QEMU GTK window showing the guest PL111/LVGL screen"
+        echo "  -g   also launch the Sense HAT emulator GUI + bridge (host TCP 4442)"
+        exit 0
+        ;;
+esac
+
 . "$(cd "$(dirname "$(command -v -- "$0")")" && pwd)/common/setup_env.sh"
 
 QEMU_AUDIO_DRV="none"
@@ -26,11 +38,6 @@ for _a in "$@"; do
     case "$_a" in
         -g) WITH_GUI=1 ;;
         -d) WITH_DISPLAY=1 ;;
-        -h|--help)
-            echo "Usage: $(basename "$0") [-d] [-g] [qemu-option]"
-            echo "  -d   graphical: open the QEMU GTK window showing the guest PL111/LVGL screen"
-            echo "  -g   also launch the Sense HAT emulator GUI + bridge (host TCP 4442)"
-            exit 0 ;;
         *)  POSARGS+=("$_a") ;;
     esac
 done
@@ -137,17 +144,20 @@ launch_qemu() {
     echo -e "\033[01;36mMAC addr: " ${QEMU_MAC_ADDR} "\033[0;37m"
     echo -e "\033[01;36mGDB port: " ${GDB_PORT} "\033[0;37m"
 
-    while IFS= read -r line; do
-      # Check if the line starts with "IB_PLATFORM"
-      if [[ $line == IB_PLATFORM* ]]; then
-    	  # Extract the value between the quotes
-    	  value=$(echo "$line" | awk -F'"' '{print $2}')
-    
-    	  # Set the IB_PLATFORM variable to the extracted value
-    	  IB_PLATFORM="$value"
-    	  break
-      fi
-    done < build/conf/local.conf
+    # Read a plain (non-override) assignment out of the configuration.
+    # Reads local.conf THEN site.conf, in the order bitbake.conf includes
+    # them, and takes the LAST match: bitbake is last-assignment-wins, so a
+    # site.conf override has to win here too — otherwise the launcher would
+    # boot a machine differently from how it was built.
+
+    conf_value() {
+        cat build/conf/local.conf build/conf/site.conf 2>/dev/null \
+            | grep -E "^$1[[:space:]]*[?:]?=" \
+            | grep -v "^$1:" \
+            | tail -1 | sed -n 's/.*"\([^"]*\)".*/\1/p'
+    }
+
+    IB_PLATFORM="$(conf_value IB_PLATFORM)"
 
     # (An AVZ boot used to be detected here by grepping this file for the
     # selected ITS, so that QEMU could be given EL2. That is now stated by
