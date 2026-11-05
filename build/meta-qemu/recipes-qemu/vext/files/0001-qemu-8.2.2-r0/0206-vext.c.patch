@@ -1,4 +1,4 @@
---- /dev/null
+--- a/hw/arm/vext/vext.c
 +++ b/hw/arm/vext/vext.c
 @@ -0,0 +1,66 @@
 +/*
@@ -37,7 +37,7 @@
 +	/* A completer (POS) */
 +}
 +
-+uint16_t get_irq_ctrl_reg(VextState *s)
++uint16_t get_irq_ctrl_reg(vext_state_t *s)
 +{
 +	/* A completer (POS) */
 +}
