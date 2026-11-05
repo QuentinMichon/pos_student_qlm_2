@@ -1,0 +1,22 @@
+--- a/arch/arm/lib/interrupts.c
++++ b/arch/arm/lib/interrupts.c
+@@ -197,10 +197,13 @@
+ 
+ void do_irq (struct pt_regs *pt_regs)
+ {
+-	efi_restore_gd();
+-	printf ("interrupt request\n");
+-	fixup_pc(pt_regs, -8);
+-	show_regs (pt_regs);
+-	show_efi_loaded_images(pt_regs);
+-	bad_mode ();
++	printf ("from do_irq : interrupt request\n");
++	handle_irq();
++
++	// efi_restore_gd();
++	// printf ("interrupt request\n");
++	// fixup_pc(pt_regs, -8);
++	// show_regs (pt_regs);
++	// show_efi_loaded_images(pt_regs);
++	// bad_mode ();
+ }

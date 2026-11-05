@@ -1,6 +1,14 @@
 --- a/cmd/Makefile
 +++ b/cmd/Makefile
-@@ -54,6 +54,7 @@
+@@ -10,6 +10,7 @@
+ obj-y += help.o
+ obj-y += panic.o
+ obj-y += version.o
++obj-y += enable_irq.o
+ 
+ # command
+ obj-$(CONFIG_CMD_ACPI) += acpi.o
+@@ -54,6 +55,7 @@
  obj-$(CONFIG_CMD_ADTIMG) += adtimg.o
  obj-$(CONFIG_CMD_ABOOTIMG) += abootimg.o
  obj-$(CONFIG_CMD_EXTENSION) += extension_board.o
