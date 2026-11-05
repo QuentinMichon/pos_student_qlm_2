@@ -1,6 +1,6 @@
 --- a/hw/arm/vext/vext.c
 +++ b/hw/arm/vext/vext.c
-@@ -0,0 +1,66 @@
+@@ -0,0 +1,319 @@
 +/*
 + * Copyright (C) 2013-2014 Romain Bornet <romain.bornet@heig-vd.ch>
 + * Copyright (C) 2016-2020 Daniel Rossier <daniel.rossier@heig-vd.ch>
@@ -25,6 +25,77 @@
 +#include "vext.h"
 +#include "vext_emul.h"
 +
++#define VEXT_LED_MASK          0x1F    /* LEDs 0 à 4 (bits 0..4) */
++
++// valeur immédiate 
++// gauche -> 0x02 
++// relacher -> 0x00
++// meme si irq non traitée
++// bit		button
++// 0		centre (middle)
++// 1		gauche
++// 2		haut
++// 3		droite
++// 4		bas
++#define PUSH_BUT_REG			VEXT_SWITCH		/* 0x12 */
++
++// Bit	LED		Couleur 
++// 0	centre 	bleu
++// 1	gauche	blanc
++// 2	haut	vert
++// 3	droite	gris
++// 4	bas		rouge
++#define LED_REG 				VEXT_LED		/* 0x3A */
++
++// pour garder l'etat instantanné de VEXT_SWITCH 
++// de manière permanante jusqu'à aquittement de l'IRQ
++// IRQ_CTRL[3:1]
++// middle=1, left=2, up=3, right=4, down=5
++#define IRQ_CTRL_REG   			VEXT_IRQ_CTRL   /* 0x18 */
++
++#define VEXT_B_MASK				0xFF
++#define VEXT_W_MASK				0xFFFF
++#define VEXT_L_MASK				0xFFFFFFFF
++#define VEXT_Q_MASK				0xFFFFFFFFFFFFFFFF
++
++#define VEXT_IRQ_STATUS_MASK   0x10
++
++/*	
++	c'est le nom sous lequel le type est enregistré. 
++	Il doit être identique à la chaîne passée dans virt.c (sysbus_create_simple("vext", ...))
++	sinon, QEMU ne trouve pas le type et s'arrête avec unknown type 'vext'.
++*/
++#define TYPE_VEXT "vext"
++#define VEXT(obj) OBJECT_CHECK(vext_state_t, (obj), TYPE_VEXT)
++
++uint8_t get_switch_offset(uint8_t pressed_switch);
++uint16_t get_irq_ctrl_reg(vext_state_t *s);
++static uint64_t vext_read(void *opaque, hwaddr offset, unsigned size);
++static void vext_write(void *opaque, hwaddr offset, uint64_t value, unsigned size);
++static void vext_init(Object *obj);
++static void vext_register_types(void);
++
++// ==================== My Adds =========================
++
++static const MemoryRegionOps vext_ops = {
++    .read = vext_read,
++    .write = vext_write,
++    .endianness = DEVICE_NATIVE_ENDIAN,
++};
++
++static void vext_send_leds(uint16_t leds)
++{
++	cJSON *root = cJSON_CreateObject();
++
++	cJSON_AddStringToObject(root, "device", DEV_LED);
++	cJSON_AddNumberToObject(root, "value", leds);
++
++	vext_cmd_post(root);   // le thread d'envoi libère root lui-même
++}
++
++// ======================================================
++
++
 +/*
 + * Peripherique emule vExt (labo 03/04)
 + *
@@ -34,36 +105,219 @@
 +
 +uint8_t get_switch_offset(uint8_t pressed_switch)
 +{
-+	/* A completer (POS) */
++	for (uint8_t n = 1; n <= 5; n++) {
++        if (pressed_switch & (1 << (n - 1)))
++            return n;
++    }
++    return 0;
 +}
 +
 +uint16_t get_irq_ctrl_reg(vext_state_t *s)
 +{
-+	/* A completer (POS) */
++	uint16_t reg = 0;
++
++    if (s->irq_enable)
++        reg |= VEXT_IRQ_EN_MASK;                              /* bit 7 */
++
++    if (s->irq_status) {
++        reg |= VEXT_IRQ_STATUS_MASK;                          /* bit 4 */
++        reg |= (s->irq_button << 1) & VEXT_IRQ_SWITCH_MASK;   /* bits 3:1 */
++        /* IRQ_SOURCE (6:5) = "00" : source = switch */
++    }
++    /* bit 0 IRQ_CLEAR : en écriture seule, toujours lu à 0 */
++    return reg;
 +}
 +
++// callback défini dans vext_emul.c
++// appelé quand un paquet JSON est reçu sous format "device": "switch"
++// serveur sens-hat (py) envoie paquet JSON 
++// -> vext_emul_event_handle() (qemu vext_emul.c) reçoit et parse
++// -> si "device": "switch" -> call vext_process_switch()
 +void vext_process_switch(void *opaque, cJSON *packet)
 +{
-+	/* A completer (POS) */
++	// 4.3 
++	
++	vext_state_t *s = VEXT(opaque);
++	cJSON *item = cJSON_GetObjectItem(packet, "status");
++
++	if(item == NULL || item->type != cJSON_Number) {
++		DBG("switch: paquet sans 'status'\n");
++        return;
++	}
++
++	s->regs[PUSH_BUT_REG / 2] = item->valueint & 0x3F;
++	// DBG("switch -> 0x%02x\n", s->regs[PUSH_BUT_REG / 2]);
++
++	uint8_t sw = get_switch_offset(item->valueint & 0x1F);
++
++	// seulement à l'appui, IRQ activée, et précédente acquittée
++	if (sw != 0 && s->irq_enable && !s->irq_status) {
++    	s->irq_status = true;
++    	s->irq_button = sw;          // figé jusqu'au clear
++    	qemu_irq_raise(s->irq);      // ligne IRQ à 1
++    	DBG("IRQ levée, switch %u\n", sw);
++	}
++
 +}
++
 +
 +static uint64_t vext_read(void *opaque, hwaddr offset, unsigned size)
 +{
 +	/* A completer (POS) */
++	vext_state_t *s = (vext_state_t *) opaque;
++    
++	// DBG("lecture de taille %u Bytes\n", size);
++
++	// mettre 64 bits même si le reg en fait 16 
++	// car c'est la signature QEMU qui l'exige
++	uint64_t value = 0;
++
++    if (offset / 2 >= ARRAY_SIZE(s->regs)) { return value; }
++
++	s->regs[IRQ_CTRL_REG / 2] = get_irq_ctrl_reg(s);   /* registre toujours à jour */
++
++	switch(size) {
++		case 1:
++			if (offset % 2 == 0) { 								// reg[7:0]
++				value = s->regs[offset / 2] & VEXT_B_MASK;
++			} else {											// reg[15:8]
++				value = (s->regs[offset / 2] >> 8) & VEXT_B_MASK;
++			}
++			break;
++		case 2:
++			value = s->regs[offset / 2];
++			break;
++		case 4:
++			value = (s->regs[offset/2 + 1] << 16);	//  value [31:16] = reg[i+1]
++			value |= s->regs[offset/2];				// 	value [15:0] = reg[i]
++			break;
++	}
++
++    // DBG("read  offset=0x%03" HWADDR_PRIx " size=%u -> 0x%04" PRIx64 "\n", offset, size, value);
++    return value;
 +}
 +
-+static void vext_write(void *opaque, hwaddr offset, uint64_t value,
-+		       unsigned size)
++static void vext_write(void *opaque, hwaddr offset, uint64_t value, unsigned size)
 +{
++	uint16_t saved_sw;
++	uint64_t old_value;
++
 +	/* A completer (POS) */
++	vext_state_t *s = (vext_state_t *) opaque;
++
++	// DBG("ecriture de taille %u Bytes\n", size);
++
++	if ( !(offset / 2 < ARRAY_SIZE(s->regs)) ) { return; }
++
++	// save SW value
++	saved_sw = s->regs[PUSH_BUT_REG / 2];
++	old_value = s->regs[offset / 2];
++
++
++	switch (size) {
++		case 1:
++			if(offset % 2 == 0) {		// reg[7:0]
++				s->regs[offset / 2] 
++					= (old_value & (~VEXT_B_MASK)) | (value & VEXT_B_MASK);
++			} else {					// reg[15:8]
++				s->regs[offset / 2] 
++					= (old_value & (~(VEXT_B_MASK << 8))) | ((value & VEXT_B_MASK) << 8 );
++			}
++			break;
++
++		case 2:
++			s->regs[offset/2] = value & VEXT_W_MASK;
++			break;
++		case 4:
++			s->regs[offset/2] = value & VEXT_L_MASK;						//  reg[i] = value [15:0]
++			s->regs[offset/2 + 1] = (value >> 16) & VEXT_L_MASK; 			//  reg[i+1] = value [31:16]
++			break;
++	}
++
++	// tester si la led doit etre update
++
++	if(LED_REG >= offset && LED_REG < (offset + size)) {
++		vext_send_leds(s->regs[LED_REG / 2]);
++	}
++
++
++	// tester si IRQ CTRL REG est update
++
++	if (IRQ_CTRL_REG >= offset && IRQ_CTRL_REG < (offset + size)) {
++    	uint16_t ctrl = s->regs[IRQ_CTRL_REG / 2];      /* valeur écrite par le guest */
++
++    	s->irq_enable = (ctrl & VEXT_IRQ_EN_MASK) != 0; /* bit 7 RW */
++
++		if (ctrl & VEXT_IRQ_CLEAR_MASK) {                /* bit 0 : 1 = acquittement */
++			s->irq_status = false;
++			s->irq_button = 0;
++			qemu_irq_lower(s->irq);                      /* ligne IRQ à 0 */
++			DBG("IRQ acquittée\n");
++		}
++
++		/* écrase ce que le write générique a mis : STATUS/BUTTON/SOURCE sont R, CLEAR est W */
++		s->regs[IRQ_CTRL_REG / 2] = get_irq_ctrl_reg(s);	
++}
++
++	//DBG("write  offset=0x%03" HWADDR_PRIx " size=%u -> from 0x%04" PRIx64 " to 0x%04" PRIx64 "\n",
++	//	offset, size, old_value, value);
++
++	// restore SW reg value
++	s->regs[PUSH_BUT_REG / 2] = saved_sw;
++
++	return;
 +}
 +
 +static void vext_init(Object *obj)
 +{
 +	/* A completer (POS) */
++	
++	vext_state_t *s = VEXT(obj);
++    SysBusDevice *sbd = SYS_BUS_DEVICE(obj);
++
++    memory_region_init_io(&s->iomem, obj, &vext_ops, s, TYPE_VEXT, 0x1000);
++    sysbus_init_mmio(sbd, &s->iomem);
++    sysbus_init_irq(sbd, &s->irq);
++
++	s->irq_enable = false;
++	s->irq_status  = false;
++	s->irq_button  = 0;
++	s->regs[IRQ_CTRL_REG / 2] = get_irq_ctrl_reg(s); // dépend des champs dans state
++
++	// démarer les connexions avec le serveur sens-hat
++	vext_emul_init(obj);
++
++    DBG("[VEXT] \n\n =================  LABO 6 ===================== \n\n");
 +}
++
++// REGISTER DU PERIPHERIQUE DANS QEMU
++
++static const TypeInfo vext_info = {
++    .name          = TYPE_VEXT,
++    .parent        = TYPE_SYS_BUS_DEVICE,
++    .instance_size = sizeof(vext_state_t),
++    .instance_init = vext_init,
++};
 +
 +static void vext_register_types(void)
 +{
 +	/* A completer (POS) */
++    type_register_static(&vext_info);
 +}
++
++type_init(vext_register_types)
++
++
++
++/*
++CMD TO USE
++
++mw.b 0x08804000 0xffff -> [0x08804000] = 0xFF
++mw.b 0x08804003 0xffff -> [0x08804003] = 0xFF
++
++md.w 0x08804000 0x4
++mw.l 0x08804038 0x20000 1 -> LED gauche
++mw.b 0x0880403a 0x4 1 -> LED haut
++
++*/
+\ No newline at end of file

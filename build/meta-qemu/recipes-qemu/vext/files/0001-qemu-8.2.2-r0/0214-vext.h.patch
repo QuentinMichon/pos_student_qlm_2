@@ -1,6 +1,6 @@
---- /dev/null
+--- a/hw/arm/vext/vext.h
 +++ b/hw/arm/vext/vext.h
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,74 @@
 +/*
 + * Copyright (C) 2013-2014 Romain Bornet <romain.bornet@heig-vd.ch>
 + * Copyright (C) 2016-2020 Daniel Rossier <daniel.rossier@heig-vd.ch>
@@ -32,10 +32,17 @@
 +typedef struct
 +{
 +    SysBusDevice busdev;
++    
 +    MemoryRegion iomem;
 +    uint16_t regs[512];		/* 1KB (512 * 16bits registers) register map */
 +
 +    qemu_irq irq;
++
++    // 4.4 état de l'irq
++    bool irq_enable;        // IRQ_CTRL[7]   IRQ_ENABLE (RW)
++    bool irq_status;        // IRQ_CTRL[4]   IRQ_STATUS (R)
++    uint8_t irq_button;     // IRQ_CTRL[3:1] IRQ_BUTTON (R) : 1..5, figé jusqu'à l'acquittement
++
 +} vext_state_t;
 +
 +/* Implemented registers addresses */

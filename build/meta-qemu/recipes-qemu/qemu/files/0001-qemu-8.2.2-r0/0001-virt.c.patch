@@ -273,8 +273,8 @@
 +    	   /* SO3 VEXT teaching device: MMIO peripheral. LED writes are forwarded
 +    	    * to the Sense HAT server (vext_emul); button presses raise its IRQ.
 +    	    * Exposed to SO3 as /dev/vext_led0..4 + /dev/vext_input — lab03: activate. */
-+    	   // sysbus_create_simple("vext", (hwaddr) vms->memmap[VIRT_VEXT].base,
-+    			   // qdev_get_gpio_in(vms->gic, vms->irqmap[VIRT_VEXT]));
++    	   sysbus_create_simple("vext", (hwaddr) vms->memmap[VIRT_VEXT].base,
++    			qdev_get_gpio_in(vms->gic, vms->irqmap[VIRT_VEXT]));
 +
 +    	   /* SO3 absolute pointer: a polled MMIO device whose registers are
 +    	    * driven by QEMU's absolute input handler. Registering the handler
