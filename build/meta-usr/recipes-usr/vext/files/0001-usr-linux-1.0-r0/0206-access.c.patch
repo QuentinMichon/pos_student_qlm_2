@@ -1,6 +1,6 @@
---- /dev/null
-+++ ./src/modules/access.c
-@@ -0,0 +1,99 @@
+--- a/src/modules/access.c
++++ b/src/modules/access.c
+@@ -0,0 +1,334 @@
 +/*
 + * access.c
 + *
@@ -21,6 +21,10 @@
 +
 +#include <asm/io.h>
 +
++#include <linux/spinlock.h>
++
++#define VEXT_NB_LEDS	5
++
 +/*
 + * The Sense HAT path needs <linux/mfd/rpisense/core.h>, which only the
 + * Raspberry Pi kernel fork carries — a vanilla kernel (virt32/virt64) has no
@@ -31,6 +35,38 @@
 +#ifdef VEXT_RPISENSE
 +#include "rpisense.h"
 +#endif
++
++
++#define VEXT_LED_OFFSET			0x3A
++#define VEXT_LEDS_024		((1 << 0) | (1 << 2) | (1 << 4))	/* 0x15 */
++
++#define VEXT_IRQ_CTRL_OFFSET	0x18
++#define VEXT_IRQ_EN				0x80
++#define VEXT_IRQ_STATUS			0x10
++#define VEXT_IRQ_CLEAR			0x01
++#define VEXT_IRQ_BUTTON(r)	(((r) >> 1) & 0x7)	/* bits 3:1 */
++
++struct vext_priv;				/* déclaration anticipée */
++
++// structure privée par LED FRAMEWORK généré 
++struct vext_led {
++    struct led_classdev cdev;   // embarquée, pas un pointeur (container_of)
++    struct vext_priv *priv;     // remonter au device
++    int idx;                    // numéro de la LED (0..4)
++};
++
++// structure privée au DRIVER
++struct vext_priv {
++	void __iomem *base;
++	struct device *dev;
++	int irq;
++#ifdef RPI_TARGET
++	struct rpisense_data sense;
++#endif
++	spinlock_t lock;			/* protège le RMW du registre LED */	
++	struct vext_led leds[VEXT_NB_LEDS];
++};
++
 +
 +/*
 + * Driver Linux du peripherique vExt (labo 02/06/07)
@@ -49,13 +85,61 @@
 +
 +static irqreturn_t switch_isr(int irq, void *dev_id)
 +{
-+	/* A completer (POS) */
++	struct vext_priv *priv = dev_id;
++	u16 ctrl = ioread16(priv->base + VEXT_IRQ_CTRL_OFFSET);
++	u8 sw;
++
++	if (!(ctrl & VEXT_IRQ_STATUS))
++		return IRQ_NONE;			/* pas pour nous */
++
++	sw = VEXT_IRQ_BUTTON(ctrl);		/* lire AVANT le clear */
++
++	if (sw >= 1 && sw <= VEXT_NB_LEDS) {
++		u16 leds;
++		
++		spin_lock(&priv->lock);
++
++		leds = ioread16(priv->base + VEXT_LED_OFFSET) ^ (1 << (sw - 1)) ;
++		iowrite16(leds, priv->base + VEXT_LED_OFFSET);
++
++		/* garder le sysfs cohérent avec le registre */
++		priv->leds[sw - 1].cdev.brightness = (leds & (1 << (sw - 1))) ? 1 : 0;
++
++		spin_unlock(&priv->lock);
++	}
++
++	/* acquitter : baisse la ligne en gardant IRQ_ENABLE (sinon ton
++	 * vext_write QEMU désactive les IRQ, bit 7 relu à chaque écriture) */
++	iowrite16(VEXT_IRQ_EN | VEXT_IRQ_CLEAR, priv->base + VEXT_IRQ_CTRL_OFFSET);
++
++	dev_info(priv->dev, "switch %u presse\n", sw);
++
 +	return IRQ_HANDLED;
 +}
 +
 +static void led_set(struct led_classdev *led_cdev, enum led_brightness brightness)
 +{
-+	/* A completer (POS) */
++	struct vext_led *led = container_of(led_cdev, struct vext_led, cdev);
++	struct vext_priv *priv = led->priv;
++	
++	unsigned long flags;
++	u16 leds;
++
++	/* zone critique */
++	spin_lock_irqsave(&priv->lock, flags);
++
++	leds = ioread16(priv->base + VEXT_LED_OFFSET);
++
++	if(brightness) {	// LED ON
++		leds |= 0b1 << led->idx; 
++	} else {			// LED OFF
++		leds &= ~( 0b1 << led->idx );
++	}
++
++	iowrite16(leds, priv->base + VEXT_LED_OFFSET);
++
++	spin_unlock_irqrestore(&priv->lock, flags);
++	/* end zone critique */
 +}
 +
 +/* sous VEXT_RPISENSE */
@@ -78,25 +162,176 @@
 +
 +static int vext_probe(struct platform_device *pdev)
 +{
-+	/* A completer (POS) */
++
++// ========================= VIRT32 ===========================================================
++# if 1
++	struct device *dev = &pdev->dev;
++	struct device_node *np = dev->of_node;	/* nœud qui a matché */
++	struct vext_priv *priv;
++	const char *type;
++	int ret, i;
++
++	if(np == NULL) {
++		return dev_err_probe(dev, -ENODEV, "aucun noeud device-tree\n");
++	}
++
++	if (of_property_read_string(np, "platform_type", &type)) {
++		return dev_err_probe(dev, -EINVAL, "propriete 'platform_type' absente\n");
++	}
++
++	/* 1. structure privée */
++	// allocation mémoire pour la structure privée (représente le device Vext)
++	
++	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
++
++	if(priv == NULL) {
++		return -ENOMEM;
++	}
++
++	priv->dev = dev;
++	platform_set_drvdata(pdev, priv);
++
++	
++	/* 2. registres vExt */
++	// lit la propriété 'reg' du nœud (index 0) et fait l'ioremap
++	priv->base = devm_platform_ioremap_resource(pdev, 0);
++	
++	if(IS_ERR(priv->base)) {
++		return dev_err_probe(dev, PTR_ERR(priv->base), 
++			"ressource 'reg' absente ou ioremap impossible\n");
++	}
++
++	
++	/* 3. verrou AVANT tout ce qui peut appeler led_set ou l'ISR */
++	spin_lock_init(&priv->lock);
++
++	/* état initial matériel : LED0, LED2, LED4 allumées */
++	iowrite16(VEXT_LEDS_024, priv->base + VEXT_LED_OFFSET);
++
++	
++	/* 4. une entrée de classe LED par LED */
++	for (i = 0; i < VEXT_NB_LEDS; i++) {
++		struct vext_led *led = &priv->leds[i];
++
++		led->idx  = i;
++		led->priv = priv;
++
++		led->cdev.name = devm_kasprintf(dev, GFP_KERNEL, "vext_led%d", i);
++		
++		if (led->cdev.name == NULL) {
++			return -ENOMEM;
++		}
++
++		led->cdev.max_brightness = 1;
++		led->cdev.brightness_set = led_set;		// callback set
++
++		/* sysfs cohérent avec l'état initial écrit ci-dessus */
++		led->cdev.brightness = (VEXT_LEDS_024 & (1 << i)) ? 1 : 0;
++
++		ret = devm_led_classdev_register(dev, &led->cdev);
++
++		if (ret) {
++			return dev_err_probe(dev, ret,
++				"enregistrement de %s impossible\n", led->cdev.name);
++		}
++	}
++
++
++	/* 5. interruption */
++	priv->irq = platform_get_irq(pdev, 0);	// numéro Linux, pas 45
++
++	if (priv->irq < 0) {
++		return priv->irq;
++	}
++
++	ret = devm_request_irq(dev, priv->irq, switch_isr, IRQF_TRIGGER_HIGH, "vext", priv);
++
++	if (ret) {
++		return dev_err_probe(dev, ret, "request_irq impossible\n");
++	}	
++
++
++	/* 6. activer l'IRQ côté vExt, APRÈS avoir installé le handler */
++	/* activer l'IRQ côté vExt (+ clear d'une éventuelle IRQ en attente),
++	 * APRÈS avoir installé le handler */
++	iowrite16(VEXT_IRQ_EN | VEXT_IRQ_CLEAR, priv->base + VEXT_IRQ_CTRL_OFFSET);
++
++	dev_info(dev, "[%s] probe OK (%pOF) : LED0-LED2-LED4 allumees\n",type, np);
++#endif
++
++// ========================= RPI4 ===========================================================
++#if 0
++	struct device *dev = &pdev->dev;
++	struct vext_priv *priv;
++	int ret;
++
++	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
++	if (!priv)
++		return -ENOMEM;
++
++	ret = rpisense_init(&priv->sense);		/* client I2C 0x46 + thread joystick */
++	if (ret)
++		return dev_err_probe(dev, ret, "rpisense_init a echoue\n");
++
++	platform_set_drvdata(pdev, priv);
++
++	rpisense_display_led(&priv->sense, 0, true);
++	rpisense_display_led(&priv->sense, 2, true);
++	rpisense_display_led(&priv->sense, 4, true);
++
++	dev_info(dev, "probe rpi4 OK : LED0-LED2-LED4 allumees\n");
++#endif
++
 +	return 0;
 +}
 +
 +static void vext_remove(struct platform_device *pdev)
 +{
-+	/* A completer (POS) */
++	struct vext_priv *priv = platform_get_drvdata(pdev);
++
++#ifdef RPI_TARGET
++	rpisense_display_led(&priv->sense, 0, false);
++	rpisense_display_led(&priv->sense, 2, false);
++	rpisense_display_led(&priv->sense, 4, false);
++	rpisense_remove(&priv->sense);		/* stoppe le thread + libère le client I2C */
++#else
++	iowrite16(VEXT_IRQ_CLEAR, priv->base + VEXT_IRQ_CTRL_OFFSET);
++	iowrite16(0, priv->base + VEXT_LED_OFFSET);
++#endif
++	dev_info(&pdev->dev, "remove : LEDs eteintes\n");
 +}
 +
-+static int access_init(void)
++
++
++static const struct of_device_id vext_of_match[] = {
++	{ .compatible = "virt32,vext" },
++	{ .compatible = "rpi4,vext" },
++	{ /* sentinelle */ }
++};
++
++MODULE_DEVICE_TABLE(of, vext_of_match);
++
++static struct platform_driver vext_driver = {
++	.probe  = vext_probe,
++	.remove = vext_remove,
++	.driver = {
++		.name           = "vext",
++		.of_match_table = vext_of_match,
++	},
++};
++
++static int __init access_init(void)
 +{
-+	/* A completer (POS) */
-+	return 0;
++	return platform_driver_register(&vext_driver);
 +}
 +
-+static void access_exit(void)
++static void __exit access_exit(void)
 +{
-+	/* A completer (POS) */
++	platform_driver_unregister(&vext_driver);
 +}
++
++module_init(access_init);
++module_exit(access_exit);
 +
 +MODULE_LICENSE("GPL");
 +MODULE_AUTHOR("HEIG-VD, REDS Institute");

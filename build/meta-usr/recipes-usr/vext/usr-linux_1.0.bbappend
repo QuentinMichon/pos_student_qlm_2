@@ -28,4 +28,5 @@ require files/0001-${PF}-patches.inc
 do_install_apps:append () {
 
     usr_do_install_file_root "${IB_TARGET}/build/src/vext/display"
+    usr_do_install_file_root "${IB_TARGET}/build/src/vext/vextctl"
 }
