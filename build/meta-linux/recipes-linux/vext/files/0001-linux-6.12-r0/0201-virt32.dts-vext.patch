@@ -1,9 +1,24 @@
 --- a/arch/arm/boot/dts/arm/virt32.dts
 +++ b/arch/arm/boot/dts/arm/virt32.dts
-@@ -420,4 +420,21 @@
+@@ -7,6 +7,13 @@
+ 	#address-cells = <0x02>;
+ 	compatible = "linux,dummy-virt";
+ 
++    vext@8804000 {
++        compatible = "virt32,vext";       /* clé de matching avec le driver */
++        reg = <0x00 0x08804000 0x00 0x1000>;  /* adresse 64 bits, taille 64 bits */
++        interrupts = <0x00 0x0d 0x04>;    /* SPI, n°13, niveau haut */
++        platform_type = "virt";
++    };
++
+ 	psci {
+ 		migrate = <0x84000005>;
+ 		cpu_on = <0x84000003>;
+@@ -420,4 +427,25 @@
  		rng-seed = <0xcb39787c 0x869fa2ed 0x55a210b0 0x6907d22a 0xfa3f0c2d 0xaa599a97 0x2ca4d708 0xbe005cd6>;
  		kaslr-seed = <0x6b4564ff 0xbac1238a>;
  	};
++	
 +	/*
 +	 * The vext teaching device, emulated by the patched QEMU (hw/arm/vext,
 +	 * VIRT_VEXT at 0x08804000, SPI 13 — the same memmap as the 64-bit virt
@@ -14,11 +29,14 @@
 +	 * (0x8005 — it differs from the arm64 one, phandles are allocation
 +	 * order): the file carries no labels.
 +	 */
-+	vext@8804000 {
-+		compatible = "virt32,vext";
-+		reg = <0x00 0x8804000 0x00 0x1000>;
-+		interrupt-parent = <0x8005>;
-+		interrupts = <0x00 0x0d 0x04>;
-+		platform_type = "virt";
-+	};
++	
++	/*
++	 *	vext@8804000 {
++	 *		compatible = "virt32,vext";
++	 *		reg = <0x00 0x8804000 0x00 0x1000>;
++	 *		interrupt-parent = <0x8005>;
++	 *		interrupts = <0x00 0x0d 0x04>;
++	 *		platform_type = "virt";
++	 *	};
++	 */
  };
