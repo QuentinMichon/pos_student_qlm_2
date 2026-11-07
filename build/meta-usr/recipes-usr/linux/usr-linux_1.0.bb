@@ -196,5 +196,5 @@ python do_clean:append () {
     # The whole IB_TARGET is regenerated from the patch set on every build,
     # so a clean removes it entirely (tree, re-attach backup and manifest).
     os.system(d.expand("rm -f ${TMPDIR}/stamps/usr-linux* ${WORKDIR}/*.patch"))
-    os.system(d.expand("rm -rf ${IB_TARGET} ${IB_TARGET}.back ${IB_TARGET}.attach.sha256"))
+    os.system(d.expand("rm -rf ${IB_TARGET} ${IB_TARGET}.back ${IB_TARGET}.attach.sha256 ${IB_TARGET}.attach.series"))
 }

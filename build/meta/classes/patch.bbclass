@@ -678,6 +678,19 @@ python do_updiff() {
         bb.fatal(f"do_updiff: staging directory {staging} not found "
                  "(run do_diffcompose first?)")
 
+    # A patch missing from the series makes its changes look like local edits.
+
+    active = ib_series_names(d)
+    attached = ib_attached_series(d)
+    if attached is not None and attached != active:
+        shutil.rmtree(staging)
+        bb.fatal(f"do_updiff: {target} was attached with another patch series "
+                 f"(tree only: {sorted(attached - active)[:5]}, SRC_URI only: "
+                 f"{sorted(active - attached)[:5]}): an override probably "
+                 "changed since the build. Restore it to fold your edits, or "
+                 f"run './scripts/build.sh -c {d.getVar('PN')}' to rebuild the "
+                 "tree from the current series. Nothing was written.")
+
     series, index = ib_patch_series(d)
     staged = index_patchset(staging)
 
@@ -786,7 +799,9 @@ python do_updiff() {
         for rel, spath in appends:
             name = f"{next_number:04d}-{os.path.basename(rel)}.patch"
             shutil.copyfile(spath, os.path.join(append_dir, name))
+            active.add(name)
             next_number += 1
+        ib_record_attached_series(d, active)
 
         inc_path = ib_inc_for(append_dir)
         header = None

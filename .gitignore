@@ -173,9 +173,11 @@ so3/so3/scripts/kconfig/zconf.tab.c
 *.rej
 # do_attach_infrabase dirty-tree guard manifests (sibling of each attached
 # component tree, e.g. avz.attach.sha256, u-boot.attach.sha256), and the
-# marker naming the recipe each tree belongs to (u-boot.attach.pf).
+# markers naming the recipe each tree belongs to (u-boot.attach.pf) and the
+# patch series it was attached with (u-boot.attach.series).
 *.attach.sha256
 *.attach.pf
+*.attach.series
 __pycache__/
 /scripts.old/
 
