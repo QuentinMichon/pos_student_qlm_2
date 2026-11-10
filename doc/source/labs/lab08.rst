@@ -19,6 +19,19 @@ Ce laboratoire se concentre sur la gestion des événements liés aux *switches*
 L'objectif principal est la réalisation d'une application qui modifie l'état des LEDs lorsqu'on appuie sur
 un *switch*.
 
+Ajout de l'utilitaire *evtest* au *rootfs*
+==========================================
+
+L'utilitaire ``evtest`` affiche en clair les événements délivrés par une entrée de ``/dev/input``. Il permet de
+valider le *driver* avant d'écrire la moindre ligne d'application, mais il n'est pas présent dans le *rootfs* de *virt32*.
+
+#. Ajouter l'option ``BR2_PACKAGE_EVTEST=y`` à la fin du fichier ``linux/rootfs/buildroot/configs/virt32_defconfig``,
+   puis régénérer le *patch* du *defconfig* et produire un nouveau ``rootfs.cpio`` en suivant la procédure du :ref:`lab03`.
+
+.. note::
+   La reconstruction du *rootfs* par la CI/CD prend du temps : lancer cette étape en premier et poursuivre avec la
+   suite du laboratoire pendant que la pipeline s'exécute.
+
 Gestion des *switches* sur *virt32* avec le *framework* associé aux entrées *input*
 ===================================================================================
 
@@ -33,6 +46,8 @@ l'espace utilisateur puisse récupérer un événement de type *input* à l'appu
 #. Rajouter un **traitement différé** qui reportera au *framework* des *input* deux événements à chaque pression d'un *switch*,
     un ayant la valeur 1 (pression) suivi immédiatement d'un autre avec la valeur 0 (relâche).
 #. Identifier l'entrée dans ``/dev/input`` qui est créée après chargement du module.
+#. Vérifier avec ``evtest /dev/input/event<n>`` que chaque pression d'un *switch* produit bien les événements attendus,
+    et relever dans ``/proc/bus/input/devices`` le nom et les *handlers* associés au périphérique.
 #. Editer le fichier ``usr/src/vextctl.c`` et réaliser une petite application qui lit en boucle les événements en provenance de cette entrée et qui affiche
     le **type**, le **code** et la **valeur** de l'événement *input*.
 
