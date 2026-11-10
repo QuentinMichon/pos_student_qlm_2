@@ -184,13 +184,6 @@ simplement dans l'environnement *SO3*.
 #. Copier l'application ``vextctl`` développé sous *Linux* au **lab06** (donc sans la gestion des switchs)
     dans ``so3/usr/src`` et adapter le fichier ``CMakeLists.txt`` afin
     qu'elle puisse être compilée comme application *SO3*.
-#. Créer les entrées requises dans le répertoire ``so3/usr/out/dev`` à l'aide de la commande ``touch``, suivant l'exemple suivant :
-
-    .. code-block:: console
-
-       ~/pos25-virt32/so3/usr/out/dev$ touch <devname>0
-       ~/pos25-virt32/so3/usr/out/dev$ touch <devname>1
-       ...
 
 #. Adapter l'application ``vextctl`` afin d'ouvrir les bonnes entrées.
 #. Déployer l'application et tester son fonctionnement.
