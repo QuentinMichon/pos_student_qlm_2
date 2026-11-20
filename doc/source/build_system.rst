@@ -315,12 +315,14 @@ commit those:
 
 Only what lives under ``build/`` is committed as plain files.
 
-``updiff`` prints one line per patch it writes. A file that already has a
-patch has its edit folded into that patch, the overlay's when it has one; a
-new file gets a new patch at the end of the overlay series. Files you did not
-touch are left alone. If more than 20 files come out as new, ``updiff`` refuses
-and writes nothing: that is build output it took for source, to be listed in
-``IB_UPDIFF_EXCLUDE``.
+``updiff`` only looks at what changed in the tree since the last attach, and ends
+with one summary line. Several patches of one patch set touching a file are merged
+into one, and a patch left empty disappears from its set; a patch of the course's
+set never merges with one of the base recipe. A file with no patch gets a new one.
+If more than 20 files come out as new, ``updiff`` refuses to write anything: it is
+almost always a build directory taken for sources, to be named in
+``IB_UPDIFF_EXCLUDE``. It also refuses, naming the file, when the patches of an
+edited file changed since the attach, as rewriting them would undo that change.
 
 Forget it and the next build tells you so: ``do_attach_infrabase`` compares the
 tree against the manifest it recorded (``<component>.attach.sha256``) and
