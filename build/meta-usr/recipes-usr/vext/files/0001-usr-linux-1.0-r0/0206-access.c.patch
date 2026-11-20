@@ -1,6 +1,6 @@
 --- a/src/modules/access.c
 +++ b/src/modules/access.c
-@@ -0,0 +1,334 @@
+@@ -0,0 +1,402 @@
 +/*
 + * access.c
 + *
@@ -60,10 +60,15 @@
 +	void __iomem *base;
 +	struct device *dev;
 +	int irq;
-+#ifdef RPI_TARGET
-+	struct rpisense_data sense;
++
++#ifdef VEXT_RPISENSE
++	struct rpisense_data sense; // propre a rpi4 
 +#endif
-+	spinlock_t lock;			/* protège le RMW du registre LED */	
++
++//#ifndef VEXT_RPISENSE			// propre a virt32
++	spinlock_t lock;			/* protège les registres vExt et la structure leds[] */
++//#endif
++	
 +	struct vext_led leds[VEXT_NB_LEDS];
 +};
 +
@@ -126,8 +131,8 @@
 +	u16 leds;
 +
 +	/* zone critique */
-+	spin_lock_irqsave(&priv->lock, flags);
 +
++	spin_lock_irqsave(&priv->lock, flags);
 +	leds = ioread16(priv->base + VEXT_LED_OFFSET);
 +
 +	if(brightness) {	// LED ON
@@ -137,9 +142,17 @@
 +	}
 +
 +	iowrite16(leds, priv->base + VEXT_LED_OFFSET);
-+
 +	spin_unlock_irqrestore(&priv->lock, flags);
++
 +	/* end zone critique */
++}
++
++static void led_set_blocking(struct led_classdev *led_cdev, enum led_brightness brightness)
++{
++	struct vext_led *led = container_of(led_cdev, struct vext_led, cdev);
++	struct vext_priv *priv = led->priv;
++	
++	rpisense_display_led(&priv->sense, led->idx, brightness);
 +}
 +
 +/* sous VEXT_RPISENSE */
@@ -160,28 +173,82 @@
 +	return len;
 +}
 +
-+static int vext_probe(struct platform_device *pdev)
++static int rpi4_probe(struct platform_device *pdev)
 +{
-+
-+// ========================= VIRT32 ===========================================================
-+# if 1
 +	struct device *dev = &pdev->dev;
 +	struct device_node *np = dev->of_node;	/* nœud qui a matché */
 +	struct vext_priv *priv;
-+	const char *type;
-+	int ret, i;
-+
-+	if(np == NULL) {
-+		return dev_err_probe(dev, -ENODEV, "aucun noeud device-tree\n");
-+	}
-+
-+	if (of_property_read_string(np, "platform_type", &type)) {
-+		return dev_err_probe(dev, -EINVAL, "propriete 'platform_type' absente\n");
-+	}
++	int ret;
 +
 +	/* 1. structure privée */
++
 +	// allocation mémoire pour la structure privée (représente le device Vext)
++	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 +	
++	if (priv == NULL) {
++		return -ENOMEM;
++	}
++
++	priv->dev = dev;
++	platform_set_drvdata(pdev, priv);
++
++	ret = rpisense_init(&priv->sense);		/* client I2C 0x46 + thread joystick */
++	
++	if (ret) {
++		return dev_err_probe(dev, ret, "rpisense_init a echoue\n");
++	}
++
++	// état initial matériel : LED0, LED2, LED4 allumées
++	rpisense_display_led(&priv->sense, 0, true);
++	rpisense_display_led(&priv->sense, 2, true);
++	rpisense_display_led(&priv->sense, 4, true);
++
++	/* 2. une entrée de classe LED par LED */
++	for (int i = 0; i < VEXT_NB_LEDS; i++) {
++		struct vext_led *led = &priv->leds[i];
++
++		led->idx  = i;
++		led->priv = priv;
++
++		led->cdev.name = devm_kasprintf(dev, GFP_KERNEL, "vext_led%d", i);
++		
++		if (led->cdev.name == NULL) {
++			return -ENOMEM;
++		}
++
++		led->cdev.max_brightness = 1;
++		led->cdev.brightness_set = led_set_blocking;		// callback set
++
++		/* sysfs cohérent avec l'état initial écrit ci-dessus */
++		if (i == 0 || i == 2 || i == 4) {
++			led->cdev.brightness = 1;
++		} else {
++			led->cdev.brightness = 0;
++		}
++
++		ret = devm_led_classdev_register(dev, &led->cdev);
++
++		if (ret) {
++			return dev_err_probe(dev, ret,
++				"enregistrement de %s impossible\n", led->cdev.name);
++		}
++	}
++
++	dev_info(dev, "probe rpi4 OK : LED0-LED2-LED4 allumees\n");
++
++	return 0;
++}
++
++static int virt32_probe(struct platform_device *pdev) {
++	
++	struct device *dev = &pdev->dev;
++	struct device_node *np = dev->of_node;	/* nœud qui a matché */
++	struct vext_priv *priv;
++	int ret, i;
++
++	/* 1. structure privée */
++
++	// allocation mémoire pour la structure privée (représente le device Vext)
 +	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
 +
 +	if(priv == NULL) {
@@ -255,34 +322,35 @@
 +	/* activer l'IRQ côté vExt (+ clear d'une éventuelle IRQ en attente),
 +	 * APRÈS avoir installé le handler */
 +	iowrite16(VEXT_IRQ_EN | VEXT_IRQ_CLEAR, priv->base + VEXT_IRQ_CTRL_OFFSET);
++	
++	return 0;
++}
 +
-+	dev_info(dev, "[%s] probe OK (%pOF) : LED0-LED2-LED4 allumees\n",type, np);
-+#endif
 +
-+// ========================= RPI4 ===========================================================
-+#if 0
++static int vext_probe(struct platform_device *pdev)
++{
 +	struct device *dev = &pdev->dev;
-+	struct vext_priv *priv;
++	struct device_node *np = dev->of_node;	/* nœud qui a matché */
++	const char *type;
 +	int ret;
 +
-+	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
-+	if (!priv)
-+		return -ENOMEM;
++	if(np == NULL) {
++		return dev_err_probe(dev, -ENODEV, "aucun noeud device-tree\n");
++	}
 +
-+	ret = rpisense_init(&priv->sense);		/* client I2C 0x46 + thread joystick */
-+	if (ret)
-+		return dev_err_probe(dev, ret, "rpisense_init a echoue\n");
++	if (of_property_read_string(np, "platform_type", &type)) {
++		return dev_err_probe(dev, -EINVAL, "propriete 'platform_type' absente\n");
++	}
 +
-+	platform_set_drvdata(pdev, priv);
++	if(strcmp(type, "virt32") == 0) {
++		ret = virt32_probe(pdev);
++	} else if(strcmp(type, "rpi4") == 0) {
++		ret = rpi4_probe(pdev);
++	} else {
++		return dev_err_probe(dev, -EINVAL, "type de plateforme inconnu : %s\n", type);
++	}
 +
-+	rpisense_display_led(&priv->sense, 0, true);
-+	rpisense_display_led(&priv->sense, 2, true);
-+	rpisense_display_led(&priv->sense, 4, true);
-+
-+	dev_info(dev, "probe rpi4 OK : LED0-LED2-LED4 allumees\n");
-+#endif
-+
-+	return 0;
++	return ret;
 +}
 +
 +static void vext_remove(struct platform_device *pdev)

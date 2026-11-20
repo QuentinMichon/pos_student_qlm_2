@@ -1,6 +1,6 @@
---- /dev/null
-+++ ./src/vext/CMakeLists.txt
-@@ -0,0 +1,9 @@
+--- a/src/vext/CMakeLists.txt
++++ b/src/vext/CMakeLists.txt
+@@ -0,0 +1,12 @@
 +
 +# The vext teaching applications.
 +#
@@ -10,3 +10,7 @@
 +
 +add_executable(display display.c)
 +target_link_libraries(display c)
++
++add_executable(vextctl vextctl.c)
++target_link_libraries(vextctl c)
+\ No newline at end of file

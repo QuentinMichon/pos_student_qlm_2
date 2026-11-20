@@ -1,0 +1,103 @@
+--- a/src/vext/vextctl.c
++++ b/src/vext/vextctl.c
+@@ -0,0 +1,99 @@
++/*
++ * vextctl.c - lab06 POS
++ *
++ * Pilote les LEDs de vExt via le framework LED de Linux (sysfs) :
++ *   - allume les LEDs une à une : LED0, LED1, ..., LED4
++ *   - puis les éteint une à une dans l'ordre inverse : LED4, ..., LED0
++ * avec un intervalle de 750 ms entre chaque LED.
++ *
++ * Le driver (access_mod.ko / access.ko) doit être chargé : il crée
++ * /sys/class/leds/vext_led0 ... vext_led4.
++ */
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++#include <fcntl.h>
++#include <errno.h>
++
++#define NB_LEDS		5
++#define DELAY_US	750000	/* 750 ms */
++
++#define LED_PATH_FMT	"/sys/class/leds/vext_led%d/brightness"
++
++static int led_fd[NB_LEDS];
++
++/* Écrit la valeur (0 ou 1) dans l'entrée brightness d'une LED */
++static int led_write(int led, int on)
++{
++	const char *val = on ? "1" : "0";
++
++	/* repositionner le curseur du fichier sysfs à 0 avant chaque écriture */
++	if (lseek(led_fd[led], 0, SEEK_SET) < 0) {
++		perror("lseek");
++		return -1;
++	}
++
++	if (write(led_fd[led], val, strlen(val)) < 0) {
++		perror("write");
++		return -1;
++	}
++
++	return 0;
++}
++
++static void close_leds(int n)
++{
++	int i;
++
++	for (i = 0; i < n; i++)
++		close(led_fd[i]);
++}
++
++int main(void)
++{
++	char path[64];
++	int i;
++
++	/* ouverture des cinq entrées brightness */
++	for (i = 0; i < NB_LEDS; i++) {
++		snprintf(path, sizeof(path), LED_PATH_FMT, i);
++
++		led_fd[i] = open(path, O_WRONLY);
++		if (led_fd[i] < 0) {
++			fprintf(stderr, "Impossible d'ouvrir %s : %s\n", path, strerror(errno));
++			fprintf(stderr, "Le driver vext est-il charge (insmod) ?\n");
++			close_leds(i);
++			return EXIT_FAILURE;
++		}
++	}
++
++    /* tout etteindre avant de commencer */
++    for(i = 0; i < NB_LEDS; i++) {
++        if (led_write(i, 0) < 0)
++            goto err;
++    }
++
++	/* allumage une à une : LED0, LED1, ..., LED4 */
++	for (i = 0; i < NB_LEDS; i++) {
++		if (led_write(i, 1) < 0)
++			goto err;
++		usleep(DELAY_US);
++	}
++
++	/* extinction une à une dans l'ordre inverse : LED4, ..., LED0 */
++	for (i = NB_LEDS - 1; i >= 0; i--) {
++		if (led_write(i, 0) < 0)
++			goto err;
++		if (i > 0)
++			usleep(DELAY_US);
++	}
++
++	close_leds(NB_LEDS);
++	return EXIT_SUCCESS;
++
++err:
++	close_leds(NB_LEDS);
++	return EXIT_FAILURE;
++}
+\ No newline at end of file
